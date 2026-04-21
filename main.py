@@ -74,9 +74,9 @@ async def index_post(
     msg = msg_override
     duress_triggered = False
     
-    actual_checkin_code = str(checkin_code) if checkin_code and not hasattr(checkin_code, "encode") and not isinstance(checkin_code, str) else checkin_code
-    if isinstance(actual_checkin_code, str) and (actual_checkin_code == "" or "Form" in str(actual_checkin_code)):
-        actual_checkin_code = None
+    # 严谨判定签到码：排除 FastAPI Form 对象、空字符串和 None
+    is_form_obj = "Form" in str(checkin_code)
+    actual_checkin_code = None if (is_form_obj or not checkin_code or str(checkin_code).strip() == "") else checkin_code
 
     if actual_checkin_code:
         if CryptoManager.verify_duress(actual_checkin_code):
@@ -100,7 +100,7 @@ async def index_post(
             user_vault = CryptoManager.get_user_vault_path(auth_user)
             files = [f.name for f in user_vault.iterdir() if f.is_file()]
         else:
-            msg = "身份验证失败"
+            if not msg: msg = "身份验证失败"
 
     return templates.TemplateResponse(
         request=request,
@@ -162,7 +162,7 @@ async def upload(request: Request, password: str = Form(...), file: UploadFile =
         raise HTTPException(status_code=400, detail="保险库已满 (1GB 限制)")
     
     CryptoManager.encrypt_file(content, file.filename, user)
-    return await index_post(request, password=password)
+    return await index_post(request, password=password, msg_override="上传成功")
 
 @app.post("/download")
 async def download(filename: str = Form(...), password: str = Form(...)):
@@ -170,6 +170,7 @@ async def download(filename: str = Form(...), password: str = Form(...)):
     if not user: raise HTTPException(status_code=403)
     try:
         decrypted_content = CryptoManager.decrypt_file(filename, user, password)
+        # 使用临时文件返回
         temp_dir = Path("/tmp/aegis")
         temp_dir.mkdir(exist_ok=True)
         temp_path = temp_dir / filename.replace(".aes", "")
