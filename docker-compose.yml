@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  aegis-vault:
+    build: .
+    ports:
+      - "46746:46746"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - AEGIS_DATA_DIR=/app/data
+      - CHECKIN_TIMEOUT=72
+    restart: unless-stopped

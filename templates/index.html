@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>AEGIS VAULT | 宙斯盾保险库</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap');
+        html, body { height: 100vh; overflow: hidden; background: radial-gradient(circle at center, #0a0f18 0%, #020408 100%); color: #00f2ff; font-family: 'Noto Sans SC', sans-serif; }
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+        .neon-border { box-shadow: 0 0 10px #00f2ff, inset 0 0 5px #00f2ff; border: 1px solid #00f2ff; }
+        .danger-border { box-shadow: 0 0 15px #ff003c, inset 0 0 5px #ff003c; border: 1px solid #ff003c; color: #ff003c; }
+        .glass { background: rgba(10, 15, 24, 0.8); backdrop-filter: blur(10px); }
+        input { background: rgba(0, 242, 255, 0.05) !important; border: 1px solid rgba(0, 242, 255, 0.3) !important; color: #00f2ff !important; outline: none; }
+        input:focus { border-color: #00f2ff !important; box-shadow: 0 0 10px rgba(0, 242, 255, 0.5); }
+        .btn-neon { background: rgba(0, 242, 255, 0.1); border: 1px solid #00f2ff; transition: all 0.3s; cursor: pointer; }
+        .btn-neon:hover { background: #00f2ff; color: #000; box-shadow: 0 0 20px #00f2ff; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="p-4 md:p-8 flex flex-col items-center justify-center relative">
+    <div class="w-full max-w-5xl space-y-6 z-20">
+        <!-- Header -->
+        <div class="flex justify-between items-center border-b border-cyan-900 pb-4">
+            <div>
+                <h1 class="text-3xl font-bold orbitron tracking-widest text-cyan-400">AEGIS-VAULT</h1>
+                <p class="text-[10px] text-cyan-700 uppercase">私密加密协议 v6.0 | 刷新即登出</p>
+            </div>
+            <div class="text-right">
+                <div class="text-[10px] text-cyan-700">系统状态</div>
+                <div class="text-xs">
+                    {% if destroyed %} <span class="text-red-500">● 密钥已销毁</span>
+                    {% elif exists %} <span class="text-green-500">● 协议运行中</span>
+                    {% else %} <span class="text-yellow-500">● 待初始化</span> {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if not exists and not destroyed %}
+        <!-- 初始化 -->
+        <div class="glass p-8 neon-border rounded-lg text-center space-y-6">
+            <h2 class="text-xl orbitron">建立最高加密协议</h2>
+            <form action="/setup" method="post" class="max-w-md mx-auto space-y-4">
+                <input type="password" name="master_password" required placeholder="设置管理员总密码" class="w-full p-3 rounded text-center">
+                <input type="password" name="checkin_code" required placeholder="设置每日签到确认码" class="w-full p-3 rounded text-center">
+                <button type="submit" class="btn-neon w-full p-3 rounded orbitron">生成 RSA-4096 密钥对</button>
+            </form>
+        </div>
+        {% elif destroyed %}
+        <div class="glass p-12 danger-border rounded-lg text-center space-y-6">
+            <h2 class="text-3xl orbitron">系统已永久锁定</h2>
+            <p class="mt-4 text-red-400">私钥已物理粉碎。所有数据已转为不可逆乱码。</p>
+            <form action="/reset" method="post">
+                <button type="submit" class="btn-neon px-8 py-3 rounded orbitron text-cyan-400 border-cyan-400 hover:bg-cyan-400 hover:text-black">重新初始化系统</button>
+            </form>
+        </div>
+        {% elif not auth %}
+        <!-- 初始界面 (未登录) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="glass p-8 neon-border rounded-lg flex flex-col items-center justify-center space-y-6">
+                <div class="text-xs text-cyan-700">自毁倒计时</div>
+                <div id="countdown" class="text-5xl font-bold orbitron text-cyan-400">00:00:00</div>
+                <form action="/" method="post" class="w-full space-y-2">
+                    <input type="password" name="checkin_code" required placeholder="输入签到码重置" class="w-full p-2 rounded text-center text-sm">
+                    <button type="submit" class="btn-neon w-full p-2 rounded text-xs">重置计时器</button>
+                </form>
+            </div>
+            <div class="glass p-8 neon-border rounded-lg flex flex-col items-center justify-center space-y-6">
+                <div class="text-xs text-cyan-700">身份验证</div>
+                <div class="text-4xl orbitron text-cyan-900">PROTECTED</div>
+                <form action="/" method="post" class="w-full space-y-2">
+                    <input type="password" name="password" required placeholder="输入访问密码" class="w-full p-2 rounded text-center text-sm">
+                    <button type="submit" class="btn-neon w-full p-2 rounded text-xs">进入保险库</button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <!-- 已登录界面 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 h-[60vh]">
+            <div class="glass p-6 neon-border rounded-lg flex flex-col space-y-4">
+                <div class="text-xs text-cyan-700">会话信息</div>
+                <div class="text-xl orbitron text-cyan-400">
+                    用户已登录
+                </div>
+                <div class="text-[10px] text-cyan-800">
+                    状态: 加密隧道已建立<br>
+                    {% if auth.user == 'admin' %}
+                    系统容量: {{ vault_size_mb }} MB / 1024 MB
+                    {% endif %}
+                </div>
+                
+                {% if auth.user == 'admin' %}
+                <button onclick="document.getElementById('settings').classList.toggle('hidden')" class="btn-neon w-full py-2 rounded text-xs">系统设置</button>
+                <div id="settings" class="hidden space-y-4 pt-4 border-t border-cyan-900">
+                    <form action="/manage_user" method="post" class="space-y-2">
+                        <input type="hidden" name="admin_pass" value="{{ auth.password }}">
+                        <select name="target_user" class="w-full bg-black text-xs p-1 border border-cyan-900">
+                            <option value="admin">管理员 (Admin)</option>
+                            <option value="user1">用户 1</option>
+                            <option value="user2">用户 2</option>
+                            <option value="user3">用户 3</option>
+                        </select>
+                        <input type="password" name="target_pass" placeholder="设置用户密码" class="w-full p-1 text-[10px] rounded">
+                        <button type="submit" class="w-full bg-cyan-900 text-[10px] py-1">更新用户权限</button>
+                    </form>
+                    <form action="/update_checkin_code" method="post" class="space-y-2">
+                        <input type="hidden" name="admin_pass" value="{{ auth.password }}">
+                        <input type="password" name="new_code" placeholder="修改签到码" class="w-full p-1 text-[10px] rounded">
+                        <button type="submit" class="w-full bg-cyan-900 text-[10px] py-1">更新签到协议</button>
+                    </form>
+                    <form action="/update_duress_code" method="post" class="space-y-2">
+                        <input type="hidden" name="admin_pass" value="{{ auth.password }}">
+                        <input type="password" name="duress_code" placeholder="设置胁迫销毁码" class="w-full p-1 text-[10px] rounded">
+                        <button type="submit" class="w-full bg-red-900 text-[10px] py-1">设置胁迫协议</button>
+                    </form>
+                </div>
+                {% endif %}
+                <button onclick="window.location.href='/'" class="mt-auto text-[10px] text-cyan-900 hover:text-cyan-400">强制断开连接</button>
+            </div>
+
+            <div class="md:col-span-2 glass p-6 neon-border rounded-lg flex flex-col">
+                <div class="flex-1 overflow-y-auto no-scrollbar space-y-2">
+                    <table class="w-full text-xs">
+                        <thead><tr class="text-cyan-700 uppercase border-b border-cyan-900"><th class="pb-2 text-left">文件名</th><th class="pb-2 text-right">操作</th></tr></thead>
+                        <tbody class="text-cyan-500">
+                            {% for file in files %}
+                            <tr class="border-t border-cyan-900/30">
+                                <td class="py-2 truncate max-w-[200px]">{{ file }}</td>
+                                <td class="py-2 text-right">
+                                    <form action="/download" method="post">
+                                        <input type="hidden" name="filename" value="{{ file }}">
+                                        <input type="hidden" name="password" value="{{ auth.password }}">
+                                        <button type="submit" class="text-cyan-300 hover:text-white">解密并下载</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <form action="/upload" method="post" enctype="multipart/form-data" class="pt-4 border-t border-cyan-900 flex gap-2">
+                    <input type="hidden" name="password" value="{{ auth.password }}">
+                    <input type="file" name="file" required class="flex-1 text-[10px] file:bg-cyan-900 file:text-cyan-400 file:border-0 file:px-2 file:py-1 file:rounded">
+                    <button type="submit" class="btn-neon px-4 py-1 rounded text-[10px] orbitron">上传加密</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        let rem = {{ remaining_total_s or 0 }};
+        let duressActive = {{ 'true' if duress_active else 'false' }};
+
+        function update() {
+            if (rem <= 0) return;
+            
+            // 正常倒计时逻辑
+            let h = Math.floor(rem / 3600), m = Math.floor((rem % 3600) / 60), s = rem % 60;
+            let el = document.getElementById('countdown');
+            if (el) el.innerText = [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+            
+            if (!duressActive) {
+                rem--;
+            }
+        }
+
+        // 胁迫自毁极速倒数逻辑
+        if (duressActive) {
+            document.body.classList.add('danger-border');
+            document.body.style.background = "radial-gradient(circle at center, #200 0%, #000 100%)";
+            let fastRem = rem;
+            let interval = setInterval(() => {
+                if (fastRem <= 0) {
+                    clearInterval(interval);
+                    window.location.href = "/"; // 倒数完刷新显示已摧毁状态
+                }
+                let h = Math.floor(fastRem / 3600), m = Math.floor((fastRem % 3600) / 60), s = fastRem % 60;
+                let el = document.getElementById('countdown');
+                if (el) el.innerText = [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+                fastRem = Math.max(0, fastRem - 317); // 极速跳秒
+            }, 50);
+        } else if (rem > 0) {
+            setInterval(update, 1000);
+            update();
+        }
+
+        {% if msg %} alert("{{ msg }}"); {% endif %}
+    </script>
+</body>
+</html>
