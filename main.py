@@ -89,6 +89,7 @@ async def index_post(
         else:
             msg = "签到码错误"
 
+    # 处理登录
     auth_user = None
     files = []
     if password and not duress_triggered:
@@ -100,7 +101,14 @@ async def index_post(
             user_vault = CryptoManager.get_user_vault_path(auth_user)
             files = [f.name for f in user_vault.iterdir() if f.is_file()]
         else:
-            if not msg: msg = "身份验证失败"
+            # 明确清空密码并设置错误提示，强制触发前端返回登录界面
+            password = None
+            if not msg: msg = "身份验证失败或会话已过期"
+
+    # 计算保险库大小逻辑保护
+    v_size = 0
+    if auth_user == "admin":
+        v_size = round(get_vault_size() / (1024*1024), 2)
 
     return templates.TemplateResponse(
         request=request,
@@ -109,11 +117,11 @@ async def index_post(
             "exists": exists,
             "destroyed": status["destroyed"],
             "remaining_total_s": remaining_seconds,
-            "auth": {"user": auth_user, "password": password} if auth_user else None,
+            "auth": {"user": auth_user, "password": password} if (auth_user and password) else None,
             "files": files,
             "msg": msg,
             "duress_active": duress_triggered,
-            "vault_size_mb": round(get_vault_size() / (1024*1024), 2) if auth_user == "admin" else None
+            "vault_size_mb": v_size if auth_user == "admin" else None
         }
     )
 
