@@ -260,9 +260,15 @@ async def logout(request: Request):
 
 
 @app.post("/setup")
-async def setup(master_password: str = Form(...), checkin_code: str = Form(...)):
+async def setup(
+    master_password: str = Form(...),
+    confirm_master_password: str = Form(...),
+    checkin_code: str = Form(...),
+):
     if (KEY_DIR / "admin.key").exists():
         return redirect_with_message("系统已初始化")
+    if master_password != confirm_master_password:
+        return redirect_with_message("两次输入的管理员密码不一致")
     if len(master_password.strip()) < 10:
         return redirect_with_message("管理员密码至少需要 10 位")
     if len(checkin_code.strip()) < 6:
@@ -289,8 +295,11 @@ async def manage_user(
     csrf_token: str = Form(...),
     target_user: str = Form(...),
     target_pass: str = Form(...),
+    confirm_target_pass: str = Form(...),
 ):
     require_session(request, csrf_token=csrf_token, admin_only=True)
+    if target_pass != confirm_target_pass:
+        return redirect_with_message("两次输入的访问密码不一致")
     if len(target_pass.strip()) < 10:
         return redirect_with_message("访问密码至少需要 10 位")
     try:
