@@ -32,6 +32,54 @@ DESTROY_LOCK = threading.RLock()
 CHECKIN_TIMEOUT = int(os.getenv("CHECKIN_TIMEOUT", 72)) * 3600
 
 class CryptoManager:
+    # 状态文件 HMAC 密钥（与私钥分离）
+    _status_hmac_key = None
+    
+    @staticmethod
+    def _get_or_generate_status_key() -> bytes:
+        """获取或生成状态文件 HMAC 密钥"""
+        if CryptoManager._status_hmac_key:
+            return CryptoManager._status_hmac_key
+        
+        # 尝试从文件读取
+        status_key_path = KEY_DIR / "status.key"
+        if status_key_path.exists():
+            try:
+                with open(status_key_path, "rb") as f:
+                    key = f.read()
+                    if len(key) == 32:  # 验证长度
+                        CryptoManager._status_hmac_key = key
+                        return key
+            except Exception:
+                pass
+        
+        # 生成新密钥
+        key = os.urandom(32)
+        try:
+            KEY_DIR.mkdir(parents=True, exist_ok=True)
+            with open(status_key_path, "wb") as f:
+                f.write(key)
+        except Exception:
+            pass
+        
+        CryptoManager._status_hmac_key = key
+        return key
+    
+    @staticmethod
+    def _compute_status_hmac(status_data: dict) -> str:
+        """计算状态数据的 HMAC"""
+        key = CryptoManager._get_or_generate_status_key()
+        # 使用 JSON 规范化
+        json_str = json.dumps(status_data, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+        h = hmac.new(key, json_str.encode('utf-8'), hashlib.sha256)
+        return h.hexdigest()
+    
+    @staticmethod
+    def _verify_status_hmac(status_data: dict, hmac_hex: str) -> bool:
+        """验证状态数据的 HMAC"""
+        expected_hmac = CryptoManager._compute_status_hmac(status_data)
+        return hmac.compare_digest(expected_hmac, hmac_hex)
+
     @staticmethod
     def ensure_dirs():
         KEY_DIR.mkdir(parents=True, exist_ok=True)
@@ -203,16 +251,42 @@ class CryptoManager:
     def update_checkin():
         BASE_DIR.mkdir(parents=True, exist_ok=True)
         with STATUS_LOCK:
+            status_data = {"last_checkin": int(time.time()), "destroyed": False}
             with open(STATUS_FILE, "w") as f:
-                json.dump({"last_checkin": int(time.time()), "destroyed": False}, f)
+                json.dump(status_data, f)
+            # 计算并存储 HMAC
+            status_hmac = CryptoManager._compute_status_hmac(status_data)
+            with open(STATUS_HMAC_FILE, "w") as f:
+                f.write(status_hmac)
 
     @staticmethod
     def get_status():
-        if not STATUS_FILE.exists(): return {"last_checkin": 0, "destroyed": False}
+        if not STATUS_FILE.exists(): 
+            return {"last_checkin": 0, "destroyed": False, "_hmac_valid": False}
         try:
             with STATUS_LOCK:
-                with open(STATUS_FILE, "r") as f: return json.load(f)
-        except: return {"last_checkin": 0, "destroyed": False}
+                with open(STATUS_FILE, "r") as f: 
+                    status_data = json.load(f)
+                
+                # 验证 HMAC
+                hmac_valid = False
+                if STATUS_HMAC_FILE.exists():
+                    try:
+                        with open(STATUS_HMAC_FILE, "r") as f:
+                            stored_hmac = f.read().strip()
+                        hmac_valid = CryptoManager._verify_status_hmac(status_data, stored_hmac)
+                    except Exception:
+                        pass
+                
+                # 如果 HMAC 验证失败，触发销毁（防篡改）
+                if not hmac_valid and STATUS_HMAC_FILE.exists():
+                    # 状态文件可能被篡改，标记为无效并触发销毁
+                    return {"last_checkin": 0, "destroyed": True, "_hmac_valid": False, "_tampered": True}
+                
+                status_data["_hmac_valid"] = hmac_valid
+                return status_data
+        except Exception: 
+            return {"last_checkin": 0, "destroyed": False, "_hmac_valid": False}
 
     @staticmethod
     def _shred_file(path: Path, passes: int):
@@ -249,8 +323,13 @@ class CryptoManager:
 
             BASE_DIR.mkdir(parents=True, exist_ok=True)
             with STATUS_LOCK:
+                status_data = {"last_checkin": 0, "destroyed": True}
                 with open(STATUS_FILE, "w") as f:
-                    json.dump({"last_checkin": 0, "destroyed": True}, f)
+                    json.dump(status_data, f)
+                # 更新 HMAC
+                status_hmac = CryptoManager._compute_status_hmac(status_data)
+                with open(STATUS_HMAC_FILE, "w") as f:
+                    f.write(status_hmac)
             
             # 这里会由 main.py 中的审计日志记录
             # 避免在 crypto.py 中导入 audit_logger 产生循环依赖
@@ -260,8 +339,13 @@ class CryptoManager:
         with DESTROY_LOCK:
             BASE_DIR.mkdir(parents=True, exist_ok=True)
             with STATUS_LOCK:
+                status_data = {"last_checkin": 0, "destroyed": False}
                 with open(STATUS_FILE, "w") as f:
-                    json.dump({"last_checkin": 0, "destroyed": False}, f)
+                    json.dump(status_data, f)
+                # 重置 HMAC
+                status_hmac = CryptoManager._compute_status_hmac(status_data)
+                with open(STATUS_HMAC_FILE, "w") as f:
+                    f.write(status_hmac)
             if KEY_DIR.exists():
                 shutil.rmtree(KEY_DIR, ignore_errors=True)
             if VAULT_DIR.exists():

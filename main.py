@@ -70,7 +70,9 @@ def get_vault_size() -> int:
 def get_current_session(request: Request) -> tuple[str | None, dict | None]:
     session_store.cleanup()
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
-    session = session_store.get(session_id)
+    client_ip = client_address(request)
+    user_agent = request.headers.get("user-agent", "")
+    session = session_store.get(session_id, client_ip=client_ip, user_agent=user_agent)
     if CryptoManager.get_status()["destroyed"] and session_id:
         session_store.clear()
         return None, None
@@ -89,6 +91,15 @@ def require_session(request: Request, csrf_token: str | None = None, admin_only:
         raise HTTPException(status_code=403, detail="请求令牌无效，请重新登录")
     if admin_only and session["user"] != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    # 检查客户端特征不匹配
+    if session.get("_fingerprint_mismatch"):
+        client_ip = client_address(request)
+        log_event(AuditEvent.INVALID_REQUEST, user=session.get("user"), client_ip=client_ip, 
+                  details={"reason": "fingerprint_mismatch"}, success=False)
+        session_store.destroy(session_id)
+        raise HTTPException(status_code=403, detail="会话客户端特征不匹配，请重新登录")
+    
     return session_id, session
 
 
@@ -96,6 +107,14 @@ def build_context(request: Request, msg: str | None = None, duress_active: bool 
     status = CryptoManager.get_status()
     exists = (KEY_DIR / "admin.key").exists()
     remaining_seconds = 0
+    
+    # 检查状态文件是否被篡改
+    if status.get("_tampered"):
+        log_event(AuditEvent.SYSTEM_DESTROYED, details={"reason": "status_file_tampered"}, success=True)
+        CryptoManager.destroy_all()
+        session_store.clear()
+        msg = "检测到状态文件篡改，系统已自毁"
+    
     if exists and not status["destroyed"]:
         elapsed = int(time.time()) - status["last_checkin"]
         remaining_seconds = max(0, CHECKIN_TIMEOUT - elapsed)
@@ -205,11 +224,18 @@ def monitor_switch() -> None:
     while True:
         status = CryptoManager.get_status()
         if not status["destroyed"] and (KEY_DIR / "admin.key").exists():
-            elapsed = int(time.time()) - status["last_checkin"]
-            if elapsed > CHECKIN_TIMEOUT:
+            # 检查状态文件是否被篡改
+            if status.get("_tampered"):
                 CryptoManager.destroy_all()
-                log_event(AuditEvent.SYSTEM_DESTROYED, details={"reason": "checkin_timeout", "elapsed_seconds": elapsed}, success=True)
+                log_event(AuditEvent.SYSTEM_DESTROYED, details={"reason": "status_file_tampered"}, success=True)
                 session_store.clear()
+            else:
+                # 正常的自毁计时器检查
+                elapsed = int(time.time()) - status["last_checkin"]
+                if elapsed > CHECKIN_TIMEOUT:
+                    CryptoManager.destroy_all()
+                    log_event(AuditEvent.SYSTEM_DESTROYED, details={"reason": "checkin_timeout", "elapsed_seconds": elapsed}, success=True)
+                    session_store.clear()
         time.sleep(60)
 
 
@@ -250,6 +276,7 @@ async def index(request: Request, msg: str | None = None):
 @app.post("/login")
 async def login(request: Request, password: str = Form(...)):
     client_ip = client_address(request)
+    user_agent = request.headers.get("user-agent", "")
     scope_key = client_ip
     retry_after = rate_limiter.check("login", scope_key)
     if retry_after:
@@ -273,7 +300,8 @@ async def login(request: Request, password: str = Form(...)):
         return redirect_with_message("身份验证失败")
 
     rate_limiter.reset("login", scope_key)
-    session_id, _ = session_store.create(auth_result["user"], auth_result["private_key"])
+    session_id, _ = session_store.create(auth_result["user"], auth_result["private_key"], 
+                                        client_ip=client_ip, user_agent=user_agent)
     log_event(AuditEvent.AUTH_LOGIN_SUCCESS, user=auth_result["user"], client_ip=client_ip, success=True)
     response = RedirectResponse(url="/", status_code=303)
     set_session_cookie(response, session_id)
