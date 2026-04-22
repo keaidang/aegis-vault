@@ -44,6 +44,23 @@
             padding: 1rem 0 2rem;
         }
 
+        .auth-body {
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .auth-shell {
+            height: 100vh;
+            padding: 0.75rem 0;
+        }
+
+        .auth-frame {
+            height: calc(100vh - 1.5rem);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
         .panel {
             background: var(--panel-bg);
             border: 1px solid var(--panel-border);
@@ -204,6 +221,79 @@
             display: none;
         }
 
+        .auth-layout {
+            flex: 1;
+            min-height: 0;
+        }
+
+        .sidebar-panel,
+        .files-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .sidebar-scroll,
+        .files-scroll {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 231, 255, 0.28) transparent;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar,
+        .files-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar-thumb,
+        .files-scroll::-webkit-scrollbar-thumb {
+            background: rgba(0, 231, 255, 0.22);
+            border-radius: 999px;
+        }
+
+        .admin-dropdown {
+            border-radius: 1rem;
+            border: 1px solid rgba(0, 231, 255, 0.18);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .admin-dropdown summary {
+            list-style: none;
+        }
+
+        .admin-dropdown summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .admin-toggle {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1rem 0.95rem;
+            background: transparent;
+            border: 0;
+            color: inherit;
+            cursor: pointer;
+        }
+
+        .admin-toggle-icon {
+            transition: transform 0.2s ease;
+        }
+
+        .admin-dropdown[open] .admin-toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .admin-content {
+            border-top: 1px solid rgba(0, 231, 255, 0.12);
+            padding: 1rem;
+        }
+
         .danger-mode {
             background:
                 radial-gradient(circle at top, rgba(255, 51, 95, 0.14), transparent 30%),
@@ -223,11 +313,27 @@
             .mobile-stack {
                 display: none;
             }
+
+            .auth-layout {
+                grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+            }
         }
 
         @media (max-width: 767px) {
             .shell {
                 width: min(100vw - 0.85rem, 100%);
+            }
+
+            .auth-shell {
+                padding: 0.4rem 0;
+            }
+
+            .auth-frame {
+                height: calc(100vh - 0.8rem);
+                border-radius: 1.1rem;
+                padding-left: 0.9rem;
+                padding-right: 0.9rem;
+                padding-bottom: 0.9rem;
             }
 
             .panel-grid {
@@ -240,9 +346,9 @@
         }
     </style>
 </head>
-<body class="{% if duress_active %}danger-mode{% endif %}">
-    <main class="shell">
-        <section class="panel neon-border rounded-[1.4rem] px-4 py-5 md:px-7 md:py-7">
+<body class="{% if duress_active %}danger-mode{% endif %}{% if auth %} auth-body{% endif %}">
+    <main class="shell{% if auth %} auth-shell{% endif %}">
+        <section class="panel neon-border rounded-[1.4rem] px-4 py-5 md:px-7 md:py-7{% if auth %} auth-frame{% endif %}">
             <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
                 <div class="space-y-2">
                     <p class="section-title">Blackbox Protocol</p>
@@ -329,9 +435,9 @@
                 </section>
             </div>
             {% else %}
-            <div class="mt-6 panel-grid">
-                <aside class="panel neon-border rounded-[1.25rem] p-5 md:col-span-4 md:p-6">
-                    <div class="space-y-5">
+            <div class="mt-6 panel-grid auth-layout">
+                <aside class="panel neon-border rounded-[1.25rem] p-5 md:p-6 sidebar-panel">
+                    <div class="space-y-5 sidebar-scroll">
                         <div class="metric">
                             <p class="section-title">Session</p>
                             <div class="mt-2 orbitron text-xl text-cyan-300 md:text-2xl">{{ auth.user|upper }}</div>
@@ -343,58 +449,56 @@
                             </p>
                         </div>
 
-                        <div class="metric">
-                            <p class="section-title">Timer</p>
-                            <div id="countdown" class="countdown orbitron mt-2 text-cyan-300">00:00:00</div>
-                            <p class="mt-3 text-sm text-cyan-100/60">签到协议仍在运行，建议定期完成签到。</p>
-                        </div>
-
                         <form action="/logout" method="post">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button type="submit" class="btn-muted orbitron w-full">断开会话</button>
                         </form>
 
                         {% if auth.is_admin %}
-                        <div class="space-y-4 rounded-[1rem] border border-cyan-900/60 bg-black/10 p-4">
-                            <div>
-                                <p class="section-title">Admin Controls</p>
-                                <h3 class="mt-2 text-base font-semibold text-cyan-200">系统管理协议</h3>
+                        <details class="admin-dropdown" id="admin-controls">
+                            <summary class="admin-toggle">
+                                <div class="text-left">
+                                    <p class="section-title">Admin Controls</p>
+                                    <h3 class="mt-2 text-base font-semibold text-cyan-200">系统管理协议</h3>
+                                </div>
+                                <span class="admin-toggle-icon text-xl text-cyan-300">⌄</span>
+                            </summary>
+                            <div class="admin-content space-y-4">
+                                <form action="/manage_user" method="post" class="space-y-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <select name="target_user" class="select-field" required>
+                                        {% for user in available_users %}
+                                        <option value="{{ user }}">{{ "管理员" if user == "admin" else user }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <input type="password" name="target_pass" required minlength="10" autocomplete="new-password" placeholder="设置访问密码" class="field">
+                                    <input type="password" name="confirm_target_pass" required minlength="10" autocomplete="new-password" placeholder="再次输入访问密码" class="field">
+                                    <button type="submit" class="btn-neon w-full">更新用户密钥</button>
+                                </form>
+
+                                <form action="/update_checkin_code" method="post" class="space-y-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="password" name="new_code" required minlength="6" autocomplete="new-password" placeholder="修改签到确认码" class="field">
+                                    <button type="submit" class="btn-neon w-full">更新签到协议</button>
+                                </form>
+
+                                <form action="/update_duress_code" method="post" class="space-y-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="password" name="duress_code" required minlength="6" autocomplete="new-password" placeholder="设置胁迫销毁码" class="field">
+                                    <button type="submit" class="btn-danger w-full">更新胁迫协议</button>
+                                </form>
+
+                                <form action="/reset" method="post" class="space-y-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <button type="submit" class="btn-muted w-full" onclick="return window.confirm('确认重置系统？这会清空当前密钥和保险库内容。');">重置系统</button>
+                                </form>
                             </div>
-
-                            <form action="/manage_user" method="post" class="space-y-3">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <select name="target_user" class="select-field" required>
-                                    {% for user in available_users %}
-                                    <option value="{{ user }}">{{ "管理员" if user == "admin" else user }}</option>
-                                    {% endfor %}
-                                </select>
-                                <input type="password" name="target_pass" required minlength="10" autocomplete="new-password" placeholder="设置访问密码" class="field">
-                                <input type="password" name="confirm_target_pass" required minlength="10" autocomplete="new-password" placeholder="再次输入访问密码" class="field">
-                                <button type="submit" class="btn-neon w-full">更新用户密钥</button>
-                            </form>
-
-                            <form action="/update_checkin_code" method="post" class="space-y-3">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <input type="password" name="new_code" required minlength="6" autocomplete="new-password" placeholder="修改签到确认码" class="field">
-                                <button type="submit" class="btn-neon w-full">更新签到协议</button>
-                            </form>
-
-                            <form action="/update_duress_code" method="post" class="space-y-3">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <input type="password" name="duress_code" required minlength="6" autocomplete="new-password" placeholder="设置胁迫销毁码" class="field">
-                                <button type="submit" class="btn-danger w-full">更新胁迫协议</button>
-                            </form>
-
-                            <form action="/reset" method="post" class="space-y-3">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <button type="submit" class="btn-muted w-full" onclick="return window.confirm('确认重置系统？这会清空当前密钥和保险库内容。');">重置系统</button>
-                            </form>
-                        </div>
+                        </details>
                         {% endif %}
                     </div>
                 </aside>
 
-                <section class="panel neon-border rounded-[1.25rem] p-5 md:col-span-8 md:p-6">
+                <section class="panel neon-border rounded-[1.25rem] p-5 md:p-6 files-panel">
                     <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
                         <div>
                             <p class="section-title">Vault Files</p>
@@ -403,7 +507,7 @@
                         <div class="text-sm text-cyan-100/55">单文件上限 {{ max_upload_mb }}MB，服务器返回后会清理临时明文文件。</div>
                     </div>
 
-                    <div class="mt-5">
+                    <div class="mt-5 files-scroll">
                         {% if not files %}
                         <div class="rounded-[1rem] border border-dashed border-cyan-900/80 px-4 py-10 text-center">
                             <p class="orbitron text-lg text-cyan-700">VAULT EMPTY</p>
@@ -481,9 +585,11 @@
             countdownEl.textContent = [hours, minutes, seconds].map((item) => String(item).padStart(2, '0')).join(':');
         }
 
-        renderCountdown(remaining);
+        if (countdownEl) {
+            renderCountdown(remaining);
+        }
 
-        if (remaining > 0) {
+        if (countdownEl && remaining > 0) {
             window.setInterval(() => {
                 if (!duressActive && remaining > 0) {
                     remaining -= 1;
