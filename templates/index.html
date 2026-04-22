@@ -80,7 +80,7 @@
 
         .panel-grid {
             display: grid;
-            grid-template-columns: repeat(12, minmax(0, 1fr));
+            grid-template-columns: minmax(0, 1fr);
             gap: 1rem;
         }
 
@@ -211,6 +211,24 @@
             font-size: 0.78rem;
         }
 
+        .footer-meta {
+            margin-top: 1rem;
+            text-align: center;
+            font-size: 0.78rem;
+            line-height: 1.8;
+            color: rgba(181, 241, 247, 0.72);
+        }
+
+        .footer-meta a {
+            color: var(--neon-cyan);
+            text-decoration: none;
+            border-bottom: 1px solid rgba(0, 231, 255, 0.26);
+        }
+
+        .footer-meta a:hover {
+            border-bottom-color: rgba(0, 231, 255, 0.8);
+        }
+
         .mobile-stack {
             display: flex;
             flex-direction: column;
@@ -306,6 +324,10 @@
                 padding-top: 1.75rem;
             }
 
+            .panel-grid {
+                grid-template-columns: repeat(12, minmax(0, 1fr));
+            }
+
             .desktop-table {
                 display: table;
             }
@@ -320,24 +342,36 @@
         }
 
         @media (max-width: 767px) {
+            .auth-body {
+                height: auto;
+                overflow: auto;
+            }
+
+            .auth-shell {
+                height: auto;
+                padding: 1rem 0 2rem;
+            }
+
+            .auth-frame {
+                height: auto;
+                display: block;
+                overflow: visible;
+            }
+
             .shell {
                 width: min(100vw - 0.85rem, 100%);
             }
 
-            .auth-shell {
-                padding: 0.4rem 0;
-            }
-
-            .auth-frame {
-                height: calc(100vh - 0.8rem);
-                border-radius: 1.1rem;
-                padding-left: 0.9rem;
-                padding-right: 0.9rem;
-                padding-bottom: 0.9rem;
-            }
-
             .panel-grid {
                 gap: 0.85rem;
+            }
+
+            .sidebar-panel,
+            .files-panel,
+            .sidebar-scroll,
+            .files-scroll {
+                display: block;
+                overflow: visible;
             }
 
             .compact-text {
@@ -353,7 +387,7 @@
                 <div class="space-y-2">
                     <p class="section-title">Blackbox Protocol</p>
                     <h1 class="orbitron text-2xl font-bold tracking-[0.28em] text-cyan-300 md:text-4xl">AEGIS VAULT</h1>
-                    <p class="max-w-2xl text-sm leading-6 text-cyan-100/70 md:text-base">自托管加密保险库，带签到倒计时、胁迫销毁和物理粉碎逻辑。</p>
+                    <p class="max-w-2xl text-sm leading-6 text-cyan-100/70 md:text-base">自托管加密保险库，开源 可控 便捷的选择</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     {% if destroyed %}
@@ -569,6 +603,16 @@
             {% endif %}
         </section>
     </main>
+
+    <footer class="footer-meta">
+        <div>开源项目 Aegis Vault</div>
+        <div>作者 keaidang</div>
+        <div>
+            GitHub:
+            <a href="https://github.com/keaidang/aegis-vault" target="_blank" rel="noopener noreferrer">点击跳转</a>
+        </div>
+        <div>邮箱: <a href="mailto:k@9o.pw">k@9o.pw</a></div>
+    </footer>
 
     <script>
         const remStart = {{ (remaining_total_s or 0)|int }};
