@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AEGIS VAULT | 宙斯盾保险库</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-size='48'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
@@ -180,10 +181,14 @@
         }
 
         .countdown {
-            font-size: clamp(2.25rem, 8vw, 4.9rem);
+            font-size: clamp(1.65rem, 6vw, 4.9rem);
             line-height: 1;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.03em;
             word-break: keep-all;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: clip;
+            max-width: 100%;
         }
 
         .section-title {
@@ -200,6 +205,15 @@
             padding: 0.95rem;
         }
 
+        .file-name-text {
+            display: block;
+            max-width: 100%;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .status-pill {
             display: inline-flex;
             align-items: center;
@@ -209,6 +223,19 @@
             border: 1px solid rgba(0, 231, 255, 0.16);
             background: rgba(0, 231, 255, 0.06);
             font-size: 0.78rem;
+        }
+
+        .idle-pill {
+            min-width: 84px;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            color: #9ff7ff;
+        }
+
+        .idle-pill.is-warning {
+            border-color: rgba(255, 51, 95, 0.45);
+            background: rgba(255, 51, 95, 0.12);
+            color: #ff94ab;
         }
 
         .footer-meta {
@@ -237,6 +264,15 @@
 
         .desktop-table {
             display: none;
+        }
+
+        .files-table {
+            table-layout: fixed;
+        }
+
+        .file-name-cell {
+            width: 100%;
+            min-width: 0;
         }
 
         .auth-layout {
@@ -377,6 +413,11 @@
             .compact-text {
                 font-size: 0.78rem;
             }
+
+            .countdown {
+                font-size: clamp(1.4rem, 10vw, 3.1rem);
+                letter-spacing: 0.015em;
+            }
         }
     </style>
 </head>
@@ -398,6 +439,7 @@
                     <span class="status-pill border-yellow-500/30 bg-yellow-500/10 text-yellow-200">● 待初始化</span>
                     {% endif %}
                     {% if auth %}
+                    <span id="idle-countdown" class="status-pill idle-pill">60s</span>
                     <span class="status-pill">{{ auth.user }}</span>
                     {% endif %}
                 </div>
@@ -483,7 +525,7 @@
                             </p>
                         </div>
 
-                        <form action="/logout" method="post">
+                        <form id="logout-form" action="/logout" method="post">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button type="submit" class="btn-muted orbitron w-full">断开会话</button>
                         </form>
@@ -554,7 +596,9 @@
                                 <div class="space-y-3">
                                     <div>
                                         <p class="section-title">Encrypted File</p>
-                                        <div class="mt-2 break-all text-sm font-medium text-cyan-100">{{ file }}</div>
+                                        <div class="mt-2 text-sm font-medium text-cyan-100">
+                                            <span class="file-name-text" title="{{ file }}">{{ file }}</span>
+                                        </div>
                                     </div>
                                     <form action="/download" method="post">
                                         <input type="hidden" name="filename" value="{{ file }}">
@@ -566,7 +610,11 @@
                             {% endfor %}
                         </div>
 
-                        <table class="desktop-table mt-2 w-full text-left text-sm">
+                        <table class="desktop-table files-table mt-2 w-full text-left text-sm">
+                            <colgroup>
+                                <col>
+                                <col style="width: 168px;">
+                            </colgroup>
                             <thead>
                                 <tr class="border-b border-cyan-900/70 text-cyan-600">
                                     <th class="pb-3 font-medium">文件名</th>
@@ -576,7 +624,9 @@
                             <tbody>
                                 {% for file in files %}
                                 <tr class="border-b border-cyan-900/30 align-middle">
-                                    <td class="py-4 pr-4 text-cyan-100/85">{{ file }}</td>
+                                    <td class="file-name-cell py-4 pr-4 text-cyan-100/85">
+                                        <span class="file-name-text" title="{{ file }}">{{ file }}</span>
+                                    </td>
                                     <td class="py-4 text-right">
                                         <form action="/download" method="post" class="inline-flex">
                                             <input type="hidden" name="filename" value="{{ file }}">
@@ -605,8 +655,7 @@
     </main>
 
     <footer class="footer-meta">
-        <div>开源项目 Aegis Vault</div>
-        <div>作者 keaidang</div>
+        <div>&copy; Aegis Vault. Licensed under the Apache License 2.0</div>
         <div>
             GitHub:
             <a href="https://github.com/keaidang/aegis-vault" target="_blank" rel="noopener noreferrer">点击跳转</a>
@@ -618,7 +667,12 @@
         const remStart = {{ (remaining_total_s or 0)|int }};
         const duressActive = {{ duress_active|tojson }};
         const countdownEl = document.getElementById('countdown');
+        const idleCountdownEl = document.getElementById('idle-countdown');
+        const logoutForm = document.getElementById('logout-form');
         let remaining = remStart;
+        let idleRemaining = 60;
+        let idleTimerId = null;
+        let idleSubmitting = false;
 
         function renderCountdown(value) {
             if (!countdownEl) return;
@@ -640,6 +694,42 @@
                 }
                 renderCountdown(remaining);
             }, 1000);
+        }
+
+        function renderIdleCountdown(value) {
+            if (!idleCountdownEl) return;
+            const safeValue = Math.max(0, value);
+            idleCountdownEl.textContent = `${String(safeValue).padStart(2, '0')}s`;
+            idleCountdownEl.classList.toggle('is-warning', safeValue <= 10);
+        }
+
+        function submitIdleLogout() {
+            if (!logoutForm || idleSubmitting) return;
+            idleSubmitting = true;
+            logoutForm.submit();
+        }
+
+        function resetIdleCountdown() {
+            if (!idleCountdownEl || idleSubmitting) return;
+            idleRemaining = 60;
+            renderIdleCountdown(idleRemaining);
+        }
+
+        if (idleCountdownEl && logoutForm) {
+            renderIdleCountdown(idleRemaining);
+
+            idleTimerId = window.setInterval(() => {
+                idleRemaining -= 1;
+                renderIdleCountdown(idleRemaining);
+                if (idleRemaining <= 0) {
+                    window.clearInterval(idleTimerId);
+                    submitIdleLogout();
+                }
+            }, 1000);
+
+            ['pointerdown', 'pointermove', 'keydown', 'scroll', 'touchstart', 'click'].forEach((eventName) => {
+                window.addEventListener(eventName, resetIdleCountdown, { passive: true });
+            });
         }
 
         {% if msg %}

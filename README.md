@@ -304,7 +304,12 @@ data/
 
 ### 方案一：Docker Compose
 
-1. 克隆项目并进入目录
+1. 克隆项目并进入目录(自行安装git)
+```bash
+git clone https://github.com/keaidang/aegis-vault.git
+cd aegis-vault
+```
+
 2. 复制配置文件
 
 ```bash
