@@ -300,8 +300,11 @@ async def login(request: Request, password: str = Form(...)):
         return redirect_with_message("身份验证失败")
 
     rate_limiter.reset("login", scope_key)
-    session_id, _ = session_store.create(auth_result["user"], auth_result["private_key"], 
-                                        client_ip=client_ip, user_agent=user_agent)
+    session_id, _ = session_store.create(
+        auth_result["user"],
+        client_ip=client_ip,
+        user_agent=user_agent,
+    )
     log_event(AuditEvent.AUTH_LOGIN_SUCCESS, user=auth_result["user"], client_ip=client_ip, success=True)
     response = RedirectResponse(url="/", status_code=303)
     set_session_cookie(response, session_id)
@@ -476,19 +479,76 @@ async def upload(request: Request, csrf_token: str = Form(...), file: UploadFile
 
 
 @app.post("/download")
-async def download(request: Request, filename: str = Form(...), csrf_token: str = Form(...)):
+async def download(
+    request: Request,
+    filename: str = Form(...),
+    csrf_token: str = Form(...),
+    password: str = Form(...),
+):
     _, session = require_session(request, csrf_token=csrf_token)
+    client_ip = client_address(request)
+    scope_key = f"{client_ip}:{session['user']}"
+    retry_after = rate_limiter.check("download", scope_key)
+    if retry_after:
+        log_event(
+            AuditEvent.RATE_LIMIT_EXCEEDED,
+            user=session["user"],
+            client_ip=client_ip,
+            details={"action": "download"},
+            success=False,
+        )
+        return redirect_with_message(f"下载尝试过多，请在 {retry_after} 秒后重试")
+
     try:
         safe_name = CryptoManager.normalize_filename(filename)
-        decrypted_content = CryptoManager.decrypt_file(safe_name, session["user"], session["private_key"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        private_key = CryptoManager.load_private_key(session["user"], password)
+    except ValueError:
+        retry_after = rate_limiter.failure("download", scope_key)
+        log_event(
+            AuditEvent.FILE_DOWNLOADED,
+            user=session["user"],
+            client_ip=client_ip,
+            details={"filename": filename, "status": "invalid_password"},
+            success=False,
+        )
+        if retry_after:
+            return redirect_with_message(f"下载尝试过多，请在 {retry_after} 秒后重试")
+        return redirect_with_message("访问密码错误")
+    if private_key is None:
+        retry_after = rate_limiter.failure("download", scope_key)
+        log_event(
+            AuditEvent.FILE_DOWNLOADED,
+            user=session["user"],
+            client_ip=client_ip,
+            details={"filename": filename, "status": "invalid_password"},
+            success=False,
+        )
+        if retry_after:
+            return redirect_with_message(f"下载尝试过多，请在 {retry_after} 秒后重试")
+        return redirect_with_message("访问密码错误")
+
+    try:
+        decrypted_content = CryptoManager.decrypt_file(safe_name, session["user"], private_key)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="文件不存在") from exc
     except Exception:
-        log_event(AuditEvent.FILE_DOWNLOADED, user=session["user"], details={"filename": filename, "status": "decrypt_failed"}, success=False)
+        retry_after = rate_limiter.failure("download", scope_key)
+        log_event(
+            AuditEvent.FILE_DOWNLOADED,
+            user=session["user"],
+            client_ip=client_ip,
+            details={"filename": filename, "status": "decrypt_failed"},
+            success=False,
+        )
+        if retry_after:
+            return redirect_with_message(f"下载尝试过多，请在 {retry_after} 秒后重试")
         return redirect_with_message("解密失败")
 
+    rate_limiter.reset("download", scope_key)
     download_name = safe_name[:-4] if safe_name.endswith(".aes") else safe_name
     temp_dir = Path("/tmp/aegis")
     temp_dir.mkdir(exist_ok=True)
@@ -496,7 +556,13 @@ async def download(request: Request, filename: str = Form(...), csrf_token: str 
     with os.fdopen(fd, "wb") as temp_file:
         temp_file.write(decrypted_content)
 
-    log_event(AuditEvent.FILE_DOWNLOADED, user=session["user"], details={"filename": safe_name, "size_bytes": len(decrypted_content)}, success=True)
+    log_event(
+        AuditEvent.FILE_DOWNLOADED,
+        user=session["user"],
+        client_ip=client_ip,
+        details={"filename": safe_name, "size_bytes": len(decrypted_content)},
+        success=True,
+    )
     
     return FileResponse(
         temp_path,

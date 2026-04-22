@@ -214,6 +214,35 @@
             white-space: nowrap;
         }
 
+        .download-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .download-inline-form {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        .download-password-field {
+            min-height: 42px;
+            width: min(220px, 100%);
+            border-radius: 0.8rem;
+            border: 1px solid rgba(0, 231, 255, 0.26);
+            background: rgba(0, 231, 255, 0.05);
+            color: var(--neon-cyan);
+            padding: 0.75rem 0.9rem;
+            outline: none;
+        }
+
+        .download-password-field:focus {
+            border-color: rgba(0, 231, 255, 0.7);
+            box-shadow: 0 0 0 3px rgba(0, 231, 255, 0.14);
+        }
+
         .status-pill {
             display: inline-flex;
             align-items: center;
@@ -418,6 +447,15 @@
                 font-size: clamp(1.4rem, 10vw, 3.1rem);
                 letter-spacing: 0.015em;
             }
+
+            .download-inline-form {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .download-password-field {
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -580,7 +618,7 @@
                             <p class="section-title">Vault Files</p>
                             <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">加密文件</h2>
                         </div>
-                        <div class="text-sm text-cyan-100/55">单文件上限 {{ max_upload_mb }}MB，服务器返回后会清理临时明文文件。</div>
+                        <div class="text-sm leading-6 text-cyan-100/55">单文件上限 {{ max_upload_mb }}MB，每次下载都需要重新输入访问密码，服务器返回后会清理临时明文文件。</div>
                     </div>
 
                     <div class="mt-5 files-scroll">
@@ -600,9 +638,10 @@
                                             <span class="file-name-text" title="{{ file }}">{{ file }}</span>
                                         </div>
                                     </div>
-                                    <form action="/download" method="post">
+                                    <form action="/download" method="post" class="download-form">
                                         <input type="hidden" name="filename" value="{{ file }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <input type="password" name="password" required autocomplete="current-password" placeholder="输入访问密码后下载" class="download-password-field">
                                         <button type="submit" class="btn-neon w-full">解密下载</button>
                                     </form>
                                 </div>
@@ -611,10 +650,10 @@
                         </div>
 
                         <table class="desktop-table files-table mt-2 w-full text-left text-sm">
-                            <colgroup>
-                                <col>
-                                <col style="width: 168px;">
-                            </colgroup>
+                                <colgroup>
+                                    <col>
+                                    <col style="width: 360px;">
+                                </colgroup>
                             <thead>
                                 <tr class="border-b border-cyan-900/70 text-cyan-600">
                                     <th class="pb-3 font-medium">文件名</th>
@@ -628,9 +667,10 @@
                                         <span class="file-name-text" title="{{ file }}">{{ file }}</span>
                                     </td>
                                     <td class="py-4 text-right">
-                                        <form action="/download" method="post" class="inline-flex">
+                                        <form action="/download" method="post" class="download-inline-form">
                                             <input type="hidden" name="filename" value="{{ file }}">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                            <input type="password" name="password" required autocomplete="current-password" placeholder="访问密码" class="download-password-field">
                                             <button type="submit" class="btn-neon px-4 py-2">解密下载</button>
                                         </form>
                                     </td>

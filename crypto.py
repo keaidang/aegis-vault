@@ -194,14 +194,28 @@ class CryptoManager:
             if key_path.exists():
                 try:
                     with open(key_path, "rb") as f:
-                        private_key = serialization.load_pem_private_key(
+                        serialization.load_pem_private_key(
                             f.read(),
                             password=password.encode(),
                             backend=default_backend(),
                         )
-                    return {"user": user, "private_key": private_key}
+                    return {"user": user}
                 except: continue
         return None
+
+    @staticmethod
+    def load_private_key(username: str, password: str):
+        if not password:
+            return None
+        key_path = CryptoManager.get_user_key_path(username)
+        if not key_path.exists():
+            return None
+        with open(key_path, "rb") as f:
+            return serialization.load_pem_private_key(
+                f.read(),
+                password=password.encode(),
+                backend=default_backend(),
+            )
 
     @staticmethod
     def encrypt_file(file_content: bytes, filename: str, username: str):
