@@ -339,16 +339,197 @@ http://localhost:46746
 - 常见 POSIX 文件系统行为
 - `mlock()` 的最佳兼容性
 
-安装示例：
+以下以 **Ubuntu / Debian** 为例，项目地址使用：
+
+```text
+https://github.com/keaidang/aegis-vault
+```
+
+#### 1. 安装系统依赖
+
+```bash
+sudo apt update
+sudo apt install -y git python3 python3-venv python3-pip build-essential libssl-dev libffi-dev python3-dev coreutils
+```
+
+说明：
+
+- `git` 用于拉取项目
+- `python3-venv` 用于创建虚拟环境
+- `coreutils` 提供 `shred`
+- `build-essential`、`libssl-dev`、`libffi-dev`、`python3-dev` 用于编译部分 Python 依赖，避免某些环境下安装失败
+
+你可以先确认 `shred` 可用：
+
+```bash
+shred --version
+```
+
+#### 2. 克隆项目
+
+```bash
+cd /opt
+sudo git clone https://github.com/keaidang/aegis-vault.git
+sudo chown -R "$USER":"$USER" /opt/aegis-vault
+cd /opt/aegis-vault
+```
+
+如果你不想放在 `/opt`，也可以克隆到家目录：
+
+```bash
+git clone https://github.com/keaidang/aegis-vault.git
+cd aegis-vault
+```
+
+#### 3. 创建虚拟环境并安装 Python 依赖
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
+```
+
+#### 4. 准备配置文件
+
+```bash
+cp .env.example .env
+```
+
+然后编辑 `.env`：
+
+```bash
+nano .env
+```
+
+一个适合本机源码部署的最小示例：
+
+```env
+PORT=46746
+AEGIS_DATA_DIR=./data
+TEMPLATE_DIR=./templates
+CHECKIN_TIMEOUT=72
+SESSION_TTL_HOURS=12
+SESSION_COOKIE_NAME=aegis_session
+SESSION_COOKIE_SECURE=false
+MAX_VAULT_SIZE_MB=1024
+MAX_UPLOAD_SIZE_MB=64
+AUDIT_LOG_DIR=./data
+```
+
+如果你后面会挂 Nginx / Caddy 并启用 HTTPS，建议改成：
+
+```env
+SESSION_COOKIE_SECURE=true
+```
+
+#### 5. 启动服务
+
+```bash
 python3 main.py
 ```
 
-如需物理粉碎能力，确保系统存在 `shred` 命令。
+启动后默认监听：
+
+```text
+http://0.0.0.0:46746
+```
+
+本机访问通常使用：
+
+```text
+http://127.0.0.1:46746
+```
+
+#### 6. 后台运行的简单方式
+
+如果你只是临时测试，可以使用：
+
+```bash
+cd /opt/aegis-vault
+source .venv/bin/activate
+nohup python3 main.py > aegis.log 2>&1 &
+```
+
+查看日志：
+
+```bash
+tail -f aegis.log
+```
+
+#### 7. 推荐方式：使用 systemd 持久运行
+
+先创建专用用户：
+
+```bash
+sudo useradd --system --create-home --shell /usr/sbin/nologin aegis
+sudo chown -R aegis:aegis /opt/aegis-vault
+```
+
+编辑 systemd 服务文件：
+
+```bash
+sudo nano /etc/systemd/system/aegis-vault.service
+```
+
+写入：
+
+```ini
+[Unit]
+Description=Aegis Vault
+After=network.target
+
+[Service]
+Type=simple
+User=aegis
+Group=aegis
+WorkingDirectory=/opt/aegis-vault
+EnvironmentFile=/opt/aegis-vault/.env
+ExecStart=/opt/aegis-vault/.venv/bin/python3 /opt/aegis-vault/main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+启用并启动：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now aegis-vault
+```
+
+检查状态：
+
+```bash
+sudo systemctl status aegis-vault
+```
+
+查看日志：
+
+```bash
+sudo journalctl -u aegis-vault -f
+```
+
+#### 8. 放行端口
+
+如果系统启用了 UFW，可放行默认端口：
+
+```bash
+sudo ufw allow 46746/tcp
+sudo ufw reload
+```
+
+#### 9. 生产环境建议
+
+- 不要直接裸露在公网，优先放到 Nginx / Caddy 之后
+- 启用 HTTPS 后把 `SESSION_COOKIE_SECURE=true`
+- 将 `AEGIS_DATA_DIR` 放到独立磁盘或加密分区
+- 对 `data/` 目录收紧权限
+- 定期备份 `audit.log` 与 `audit.hash`
+
+如需物理粉碎能力，确保系统存在 `shred` 命令；如部署在 SSD、快照盘或 CoW 文件系统上，应理解 `shred` 的实际效果会打折扣。
 
 ---
 

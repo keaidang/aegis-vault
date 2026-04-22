@@ -21,3 +21,8 @@ Thumbs.db
 
 data/
 tmp/
+
+# Local documentation / analysis files
+THREAT_MODEL.py
+.github/copilot-instructions.md
+docs/SECURITY_HARDENING.md
