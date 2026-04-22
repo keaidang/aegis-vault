@@ -21,6 +21,7 @@ BASE_DIR = Path(os.getenv("AEGIS_DATA_DIR", "./data"))
 KEY_DIR = BASE_DIR / "keys"
 VAULT_DIR = BASE_DIR / "vault"
 STATUS_FILE = BASE_DIR / "status.json"
+STATUS_HMAC_FILE = BASE_DIR / "status.hmac"
 CHECKIN_HASH_PATH = KEY_DIR / "checkin.hash"
 DURESS_HASH_PATH = KEY_DIR / "duress.hash"
 SUPPORTED_USERS = ("admin", "user1", "user2", "user3")
@@ -250,6 +251,9 @@ class CryptoManager:
             with STATUS_LOCK:
                 with open(STATUS_FILE, "w") as f:
                     json.dump({"last_checkin": 0, "destroyed": True}, f)
+            
+            # 这里会由 main.py 中的审计日志记录
+            # 避免在 crypto.py 中导入 audit_logger 产生循环依赖
 
     @staticmethod
     def reset_system():

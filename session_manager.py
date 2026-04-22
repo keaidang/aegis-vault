@@ -1,6 +1,8 @@
 import secrets
 import threading
 import time
+import gc
+from cryptography.hazmat.primitives import serialization
 
 
 class SessionStore:
@@ -41,7 +43,12 @@ class SessionStore:
         if not session_id:
             return
         with self._lock:
-            self._sessions.pop(session_id, None)
+            session = self._sessions.pop(session_id, None)
+            # 安全清除私钥：覆盖敏感数据
+            if session and "private_key" in session:
+                session["private_key"] = None
+            session = None
+            gc.collect()  # 强制垃圾回收以清除内存
 
     def invalidate_user(self, username: str) -> None:
         with self._lock:
@@ -51,7 +58,11 @@ class SessionStore:
                 if session["user"] == username
             ]
             for session_id in stale_ids:
-                self._sessions.pop(session_id, None)
+                session = self._sessions.pop(session_id, None)
+                # 安全清除私钥
+                if session and "private_key" in session:
+                    session["private_key"] = None
+            gc.collect()  # 强制垃圾回收
 
     def cleanup(self) -> None:
         now = int(time.time())
@@ -66,7 +77,12 @@ class SessionStore:
 
     def clear(self) -> None:
         with self._lock:
+            # 安全清除所有私钥
+            for session_id, session in self._sessions.items():
+                if "private_key" in session:
+                    session["private_key"] = None
             self._sessions.clear()
+            gc.collect()  # 强制垃圾回收
 
 
 class RateLimiter:
