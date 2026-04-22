@@ -203,22 +203,22 @@ async def login(request: Request, password: str = Form(...)):
     if retry_after:
         return redirect_with_message(f"尝试过多，请在 {retry_after} 秒后重试")
 
-    auth_user = CryptoManager.authenticate(password)
-    if auth_user == "DURESS_TRIGGERED":
+    auth_result = CryptoManager.authenticate(password)
+    if auth_result == "DURESS_TRIGGERED":
         session_store.clear()
         rate_limiter.reset("login", scope_key)
         response = redirect_with_message("身份验证失败")
         clear_session_cookie(response)
         return response
 
-    if not auth_user:
+    if not auth_result:
         retry_after = rate_limiter.failure("login", scope_key)
         if retry_after:
             return redirect_with_message(f"尝试过多，请在 {retry_after} 秒后重试")
         return redirect_with_message("身份验证失败")
 
     rate_limiter.reset("login", scope_key)
-    session_id, _ = session_store.create(auth_user, password)
+    session_id, _ = session_store.create(auth_result["user"], auth_result["private_key"])
     response = RedirectResponse(url="/", status_code=303)
     set_session_cookie(response, session_id)
     return response
@@ -358,7 +358,7 @@ async def download(request: Request, filename: str = Form(...), csrf_token: str 
     _, session = require_session(request, csrf_token=csrf_token)
     try:
         safe_name = CryptoManager.normalize_filename(filename)
-        decrypted_content = CryptoManager.decrypt_file(safe_name, session["user"], session["password"])
+        decrypted_content = CryptoManager.decrypt_file(safe_name, session["user"], session["private_key"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:

@@ -145,8 +145,12 @@ class CryptoManager:
             if key_path.exists():
                 try:
                     with open(key_path, "rb") as f:
-                        serialization.load_pem_private_key(f.read(), password=password.encode(), backend=default_backend())
-                    return user
+                        private_key = serialization.load_pem_private_key(
+                            f.read(),
+                            password=password.encode(),
+                            backend=default_backend(),
+                        )
+                    return {"user": user, "private_key": private_key}
                 except: continue
         return None
 
@@ -172,10 +176,7 @@ class CryptoManager:
             f.write(final_data)
 
     @staticmethod
-    def decrypt_file(filename: str, username: str, password: str) -> bytes:
-        with open(CryptoManager.get_user_key_path(username), "rb") as f:
-            private_key = serialization.load_pem_private_key(f.read(), password=password.encode(), backend=default_backend())
-
+    def decrypt_file(filename: str, username: str, private_key) -> bytes:
         encrypted_path = CryptoManager.get_encrypted_file_path(username, filename)
         with open(encrypted_path, "rb") as f:
             data = f.read()
