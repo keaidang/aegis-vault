@@ -1,262 +1,498 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AEGIS VAULT | 宙斯盾保险库</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap');
-        
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
         :root {
-            --neon-cyan: #00f2ff;
-            --neon-red: #ff003c;
-            --bg-dark: #020408;
+            --neon-cyan: #00e7ff;
+            --neon-cyan-soft: rgba(0, 231, 255, 0.18);
+            --neon-red: #ff335f;
+            --bg-dark: #02060d;
+            --panel-bg: rgba(8, 14, 26, 0.76);
+            --panel-border: rgba(0, 231, 255, 0.32);
         }
 
-        body { 
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
             min-height: 100vh;
-            background: radial-gradient(circle at center, #0a0f18 0%, var(--bg-dark) 100%); 
-            color: var(--neon-cyan); 
+            margin: 0;
+            color: var(--neon-cyan);
             font-family: 'Noto Sans SC', sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(0, 231, 255, 0.14), transparent 34%),
+                radial-gradient(circle at bottom right, rgba(255, 51, 95, 0.12), transparent 28%),
+                linear-gradient(180deg, #07101e 0%, var(--bg-dark) 58%, #010308 100%);
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
         }
 
-        .orbitron { font-family: 'Orbitron', sans-serif; }
-        
-        .neon-border { 
-            box-shadow: 0 0 15px rgba(0, 242, 255, 0.3), inset 0 0 5px rgba(0, 242, 255, 0.2); 
-            border: 1px solid var(--neon-cyan); 
-        }
-        
-        .danger-border { 
-            box-shadow: 0 0 20px rgba(255, 0, 60, 0.4), inset 0 0 10px rgba(255, 0, 60, 0.2); 
-            border: 1px solid var(--neon-red); 
-            color: var(--neon-red); 
+        .orbitron {
+            font-family: 'Orbitron', sans-serif;
         }
 
-        .glass { 
-            background: rgba(10, 15, 24, 0.7); 
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+        .shell {
+            width: min(1120px, calc(100vw - 1.5rem));
+            margin: 0 auto;
+            padding: 1rem 0 2rem;
         }
 
-        input, select { 
-            background: rgba(0, 242, 255, 0.05) !important; 
-            border: 1px solid rgba(0, 242, 255, 0.3) !important; 
-            color: var(--neon-cyan) !important; 
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset, 0 16px 60px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+
+        .neon-border {
+            box-shadow: 0 0 18px rgba(0, 231, 255, 0.14), inset 0 0 12px rgba(0, 231, 255, 0.05);
+        }
+
+        .danger-border {
+            border-color: rgba(255, 51, 95, 0.45);
+            box-shadow: 0 0 22px rgba(255, 51, 95, 0.2), inset 0 0 14px rgba(255, 51, 95, 0.08);
+        }
+
+        .panel-grid {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .field,
+        .select-field,
+        .file-field {
+            width: 100%;
+            min-height: 48px;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(0, 231, 255, 0.26);
+            background: rgba(0, 231, 255, 0.05);
+            color: var(--neon-cyan);
+            padding: 0.9rem 1rem;
             outline: none;
-            transition: all 0.2s ease;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
         }
 
-        input:focus { 
-            border-color: var(--neon-cyan) !important; 
-            box-shadow: 0 0 10px rgba(0, 242, 255, 0.4); 
+        .field:focus,
+        .select-field:focus,
+        .file-field:focus {
+            border-color: rgba(0, 231, 255, 0.7);
+            box-shadow: 0 0 0 3px rgba(0, 231, 255, 0.14);
         }
 
-        .btn-neon { 
-            background: rgba(0, 242, 255, 0.1); 
-            border: 1px solid var(--neon-cyan); 
-            transition: all 0.3s; 
+        .select-field option {
+            background: #08111f;
+            color: #dffcff;
+        }
+
+        .file-field {
+            padding: 0.55rem 0.75rem;
+        }
+
+        .file-field::file-selector-button {
+            border: 0;
+            border-radius: 0.75rem;
+            background: rgba(0, 231, 255, 0.14);
+            color: var(--neon-cyan);
+            padding: 0.75rem 0.95rem;
+            margin-right: 0.85rem;
             cursor: pointer;
+        }
+
+        .btn-neon,
+        .btn-danger,
+        .btn-muted {
+            min-height: 48px;
+            border-radius: 0.95rem;
+            padding: 0.85rem 1rem;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+            font-weight: 700;
+            letter-spacing: 0.08em;
             text-transform: uppercase;
-            letter-spacing: 0.1em;
         }
 
-        .btn-neon:hover { 
-            background: var(--neon-cyan); 
-            color: #000; 
-            box-shadow: 0 0 20px var(--neon-cyan); 
+        .btn-neon {
+            background: rgba(0, 231, 255, 0.11);
+            border-color: rgba(0, 231, 255, 0.6);
+            color: var(--neon-cyan);
         }
 
-        /* 移动端优化 */
-        @media (max-width: 640px) {
-            .main-container { padding: 1rem; }
-            .glass { padding: 1.5rem !important; }
-            h1 { font-size: 1.5rem !important; }
-            #countdown { font-size: 2.5rem !important; }
+        .btn-neon:hover {
+            transform: translateY(-1px);
+            background: rgba(0, 231, 255, 0.2);
+            box-shadow: 0 10px 24px rgba(0, 231, 255, 0.14);
         }
 
-        /* 兼容性修复 */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .btn-danger {
+            background: rgba(255, 51, 95, 0.12);
+            border-color: rgba(255, 51, 95, 0.55);
+            color: #ff8aa2;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 51, 95, 0.18);
+            box-shadow: 0 10px 24px rgba(255, 51, 95, 0.14);
+        }
+
+        .btn-muted {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(0, 231, 255, 0.14);
+            color: #9bc9ce;
+        }
+
+        .btn-muted:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .metric {
+            border-radius: 1rem;
+            border: 1px solid rgba(0, 231, 255, 0.16);
+            background: linear-gradient(180deg, rgba(0, 231, 255, 0.06), rgba(0, 231, 255, 0.02));
+            padding: 1rem;
+        }
+
+        .countdown {
+            font-size: clamp(2.25rem, 8vw, 4.9rem);
+            line-height: 1;
+            letter-spacing: 0.08em;
+            word-break: keep-all;
+        }
+
+        .section-title {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            color: rgba(138, 224, 233, 0.76);
+        }
+
+        .file-card {
+            border-radius: 1rem;
+            border: 1px solid rgba(0, 231, 255, 0.12);
+            background: rgba(0, 231, 255, 0.04);
+            padding: 0.95rem;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            border-radius: 999px;
+            padding: 0.45rem 0.75rem;
+            border: 1px solid rgba(0, 231, 255, 0.16);
+            background: rgba(0, 231, 255, 0.06);
+            font-size: 0.78rem;
+        }
+
+        .mobile-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .desktop-table {
+            display: none;
+        }
+
+        .danger-mode {
+            background:
+                radial-gradient(circle at top, rgba(255, 51, 95, 0.14), transparent 30%),
+                linear-gradient(180deg, #14070d 0%, #050203 60%, #020103 100%);
+        }
+
+        @media (min-width: 768px) {
+            .shell {
+                width: min(1180px, calc(100vw - 2.5rem));
+                padding-top: 1.75rem;
+            }
+
+            .desktop-table {
+                display: table;
+            }
+
+            .mobile-stack {
+                display: none;
+            }
+        }
+
+        @media (max-width: 767px) {
+            .shell {
+                width: min(100vw - 0.85rem, 100%);
+            }
+
+            .panel-grid {
+                gap: 0.85rem;
+            }
+
+            .compact-text {
+                font-size: 0.78rem;
+            }
+        }
     </style>
 </head>
-<body class="flex flex-col items-center justify-center p-4">
-    <div class="w-full max-w-5xl space-y-6 z-20 main-container">
-        <!-- Header -->
-        <div class="flex flex-col sm:flex-row justify-between items-center border-b border-cyan-900 pb-4 gap-4">
-            <div class="text-center sm:text-left">
-                <h1 class="text-2xl md:text-3xl font-bold orbitron tracking-widest text-cyan-400">AEGIS-VAULT</h1>
-                <p class="text-[10px] text-cyan-700 uppercase">黑箱协议 v7.0 | 全网兼容适配</p>
-            </div>
-            <div class="text-center sm:text-right">
-                <div class="text-[10px] text-cyan-700">安全防护状态</div>
-                <div class="text-xs">
-                    {% if destroyed %} <span class="text-red-500">● 系统已自毁</span>
-                    {% elif exists %} <span class="text-green-500">● 隧道运行中</span>
-                    {% else %} <span class="text-yellow-500">● 待初始化</span> {% endif %}
+<body class="{% if duress_active %}danger-mode{% endif %}">
+    <main class="shell">
+        <section class="panel neon-border rounded-[1.4rem] px-4 py-5 md:px-7 md:py-7">
+            <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
+                <div class="space-y-2">
+                    <p class="section-title">Blackbox Protocol</p>
+                    <h1 class="orbitron text-2xl font-bold tracking-[0.28em] text-cyan-300 md:text-4xl">AEGIS VAULT</h1>
+                    <p class="max-w-2xl text-sm leading-6 text-cyan-100/70 md:text-base">自托管加密保险库，带签到倒计时、胁迫销毁和物理粉碎逻辑。</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    {% if destroyed %}
+                    <span class="status-pill border-red-500/30 bg-red-500/10 text-red-300">● 系统已自毁</span>
+                    {% elif exists %}
+                    <span class="status-pill text-emerald-300">● 隧道运行中</span>
+                    {% else %}
+                    <span class="status-pill border-yellow-500/30 bg-yellow-500/10 text-yellow-200">● 待初始化</span>
+                    {% endif %}
+                    {% if auth %}
+                    <span class="status-pill">{{ auth.user }}</span>
+                    {% endif %}
                 </div>
             </div>
-        </div>
 
-        {% if not exists and not destroyed %}
-        <!-- 初始化 -->
-        <div class="glass p-6 md:p-8 neon-border rounded-xl text-center space-y-6">
-            <h2 class="text-lg md:text-xl orbitron">建立最高加密协议</h2>
-            <form action="/setup" method="post" class="max-w-md mx-auto space-y-4">
-                <input type="password" name="master_password" required placeholder="设置管理员总密码" class="w-full p-4 rounded-lg text-center">
-                <input type="password" name="checkin_code" required placeholder="设置每日签到确认码" class="w-full p-4 rounded-lg text-center">
-                <button type="submit" class="btn-neon w-full p-4 rounded-lg orbitron font-bold">生成 RSA-4096 密钥对</button>
-            </form>
-        </div>
-        {% elif destroyed %}
-        <div class="glass p-8 md:p-12 danger-border rounded-xl text-center space-y-8">
-            <div class="space-y-4">
-                <h2 class="text-2xl md:text-3xl orbitron">系统已永久锁定</h2>
-                <p class="text-sm md:text-base text-red-400">私钥已物理粉碎。所有数据已转为不可逆乱码。</p>
+            {% if not exists and not destroyed %}
+            <div class="mx-auto mt-6 max-w-2xl">
+                <div class="panel neon-border rounded-[1.25rem] px-5 py-6 md:px-7 md:py-8">
+                    <div class="mb-6 space-y-2 text-center">
+                        <p class="section-title">Initialize</p>
+                        <h2 class="orbitron text-xl text-cyan-300 md:text-2xl">建立最高加密协议</h2>
+                        <p class="text-sm text-cyan-100/65">首次部署后创建管理员密钥和签到协议。</p>
+                    </div>
+                    <form action="/setup" method="post" class="space-y-4">
+                        <input type="password" name="master_password" required minlength="10" autocomplete="new-password" placeholder="设置管理员总密码" class="field">
+                        <input type="password" name="checkin_code" required minlength="6" autocomplete="new-password" placeholder="设置签到确认码" class="field">
+                        <button type="submit" class="btn-neon orbitron w-full">生成 RSA-4096 密钥对</button>
+                    </form>
+                </div>
             </div>
-            <form action="/reset" method="post">
-                <button type="submit" class="btn-neon px-10 py-4 rounded-lg orbitron text-cyan-400 border-cyan-400 hover:bg-cyan-400 hover:text-black font-bold">重新初始化系统</button>
-            </form>
-        </div>
-        {% elif not auth %}
-        <!-- 初始界面 (未登录) -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="glass p-6 md:p-8 neon-border rounded-xl flex flex-col items-center justify-center space-y-6">
-                <div class="text-[10px] text-cyan-700 uppercase tracking-widest">自毁倒计时</div>
-                <div id="countdown" class="text-4xl md:text-5xl font-bold orbitron text-cyan-400">00:00:00</div>
-                <form action="/" method="post" class="w-full space-y-3">
-                    <input type="password" name="checkin_code" required placeholder="输入签到码重置" class="w-full p-3 rounded-lg text-center text-sm">
-                    <button type="submit" class="btn-neon w-full p-3 rounded-lg text-xs font-bold">重置协议计时器</button>
-                </form>
+            {% elif destroyed %}
+            <div class="mx-auto mt-6 max-w-2xl">
+                <div class="panel danger-border rounded-[1.25rem] px-5 py-7 text-center md:px-8 md:py-10">
+                    <div class="space-y-3">
+                        <p class="section-title text-red-300/80">Failsafe</p>
+                        <h2 class="orbitron text-2xl text-red-300 md:text-3xl">系统已永久锁定</h2>
+                        <p class="mx-auto max-w-xl text-sm leading-7 text-red-100/70 md:text-base">私钥和加密数据已执行销毁流程。你可以重置系统重新初始化，但无法恢复已销毁内容。</p>
+                    </div>
+                    <form action="/reset" method="post" class="mt-8">
+                        <button type="submit" class="btn-neon orbitron w-full md:w-auto md:px-8">重新初始化系统</button>
+                    </form>
+                </div>
             </div>
-            <div class="glass p-6 md:p-8 neon-border rounded-xl flex flex-col items-center justify-center space-y-6">
-                <div class="text-[10px] text-cyan-700 uppercase tracking-widest">身份验证</div>
-                <div class="text-3xl md:text-4xl orbitron text-cyan-900 opacity-50">加密保护中</div>
-                <form action="/" method="post" class="w-full space-y-3">
-                    <input type="password" name="password" required placeholder="输入访问密码" class="w-full p-3 rounded-lg text-center text-sm">
-                    <button type="submit" class="btn-neon w-full p-3 rounded-lg text-xs font-bold">进入数字保险库</button>
-                </form>
+            {% elif not auth %}
+            <div class="mt-6 panel-grid">
+                <section class="panel neon-border rounded-[1.25rem] p-5 md:col-span-6 md:p-7">
+                    <div class="space-y-4">
+                        <div>
+                            <p class="section-title">Dead Man's Switch</p>
+                            <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">自毁倒计时</h2>
+                        </div>
+                        <div class="metric">
+                            <div id="countdown" class="countdown orbitron text-cyan-300">00:00:00</div>
+                            <p class="mt-3 text-sm leading-6 text-cyan-100/60">输入正确签到码后会立即重置计时器。</p>
+                        </div>
+                        <form action="/checkin" method="post" class="space-y-4">
+                            <input type="password" name="checkin_code" required autocomplete="current-password" placeholder="输入签到码重置计时器" class="field">
+                            <button type="submit" class="btn-neon orbitron w-full">重置协议计时器</button>
+                        </form>
+                    </div>
+                </section>
+
+                <section class="panel neon-border rounded-[1.25rem] p-5 md:col-span-6 md:p-7">
+                    <div class="space-y-4">
+                        <div>
+                            <p class="section-title">Authentication</p>
+                            <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">进入数字保险库</h2>
+                        </div>
+                        <div class="metric">
+                            <div class="orbitron text-2xl text-cyan-700 md:text-3xl">ENCRYPTION ACTIVE</div>
+                            <p class="mt-3 text-sm leading-6 text-cyan-100/60">登录后使用安全会话访问上传、下载和系统管理操作。</p>
+                        </div>
+                        <form action="/login" method="post" class="space-y-4">
+                            <input type="password" name="password" required autocomplete="current-password" placeholder="输入访问密码" class="field">
+                            <button type="submit" class="btn-neon orbitron w-full">进入保险库</button>
+                        </form>
+                    </div>
+                </section>
             </div>
-        </div>
-        {% else %}
-        <!-- 已登录界面 -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:h-[65vh]">
-            <div class="glass p-6 neon-border rounded-xl flex flex-col space-y-6">
-                <div class="space-y-1">
-                    <div class="text-[10px] text-cyan-700 uppercase tracking-widest">会话状态</div>
-                    <div class="text-xl orbitron text-cyan-400">用户已登录</div>
-                    <div class="text-[10px] text-cyan-800 leading-relaxed">
-                        加密隧道: 状态良好<br>
-                        {% if auth.user == 'admin' %}
-                        系统容量: {{ vault_size_mb }} / 1024 MB
+            {% else %}
+            <div class="mt-6 panel-grid">
+                <aside class="panel neon-border rounded-[1.25rem] p-5 md:col-span-4 md:p-6">
+                    <div class="space-y-5">
+                        <div class="metric">
+                            <p class="section-title">Session</p>
+                            <div class="mt-2 orbitron text-xl text-cyan-300 md:text-2xl">{{ auth.user|upper }}</div>
+                            <p class="mt-3 text-sm leading-6 text-cyan-100/65">
+                                当前通过服务端会话访问，敏感口令不再下发到前端。
+                                {% if auth.is_admin and vault_size_mb is not none %}
+                                <br>系统容量: {{ vault_size_mb }} / {{ max_vault_mb }} MB
+                                {% endif %}
+                            </p>
+                        </div>
+
+                        <div class="metric">
+                            <p class="section-title">Timer</p>
+                            <div id="countdown" class="countdown orbitron mt-2 text-cyan-300">00:00:00</div>
+                            <p class="mt-3 text-sm text-cyan-100/60">签到协议仍在运行，建议定期完成签到。</p>
+                        </div>
+
+                        <form action="/logout" method="post">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn-muted orbitron w-full">断开会话</button>
+                        </form>
+
+                        {% if auth.is_admin %}
+                        <div class="space-y-4 rounded-[1rem] border border-cyan-900/60 bg-black/10 p-4">
+                            <div>
+                                <p class="section-title">Admin Controls</p>
+                                <h3 class="mt-2 text-base font-semibold text-cyan-200">系统管理协议</h3>
+                            </div>
+
+                            <form action="/manage_user" method="post" class="space-y-3">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <select name="target_user" class="select-field" required>
+                                    {% for user in available_users %}
+                                    <option value="{{ user }}">{{ "管理员" if user == "admin" else user }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input type="password" name="target_pass" required minlength="10" autocomplete="new-password" placeholder="设置访问密码" class="field">
+                                <button type="submit" class="btn-neon w-full">更新用户密钥</button>
+                            </form>
+
+                            <form action="/update_checkin_code" method="post" class="space-y-3">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="password" name="new_code" required minlength="6" autocomplete="new-password" placeholder="修改签到确认码" class="field">
+                                <button type="submit" class="btn-neon w-full">更新签到协议</button>
+                            </form>
+
+                            <form action="/update_duress_code" method="post" class="space-y-3">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="password" name="duress_code" required minlength="6" autocomplete="new-password" placeholder="设置胁迫销毁码" class="field">
+                                <button type="submit" class="btn-danger w-full">更新胁迫协议</button>
+                            </form>
+
+                            <form action="/reset" method="post" class="space-y-3">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="btn-muted w-full" onclick="return window.confirm('确认重置系统？这会清空当前密钥和保险库内容。');">重置系统</button>
+                            </form>
+                        </div>
                         {% endif %}
                     </div>
-                </div>
-                
-                {% if auth.user == 'admin' %}
-                <div class="space-y-2">
-                    <button onclick="document.getElementById('settings').classList.toggle('hidden')" class="btn-neon w-full py-2 rounded-lg text-[10px] font-bold">系统管理协议</button>
-                    <div id="settings" class="hidden space-y-4 pt-4 border-t border-cyan-900">
-                        <form action="/manage_user" method="post" class="space-y-2">
-                            <input type="hidden" name="admin_pass" value="{{ auth.password }}">
-                            <select name="target_user" class="w-full text-[10px] p-2 rounded">
-                                <option value="admin">管理员 (Admin)</option>
-                                <option value="user1">用户 1</option>
-                                <option value="user2">用户 2</option>
-                                <option value="user3">用户 3</option>
-                            </select>
-                            <input type="password" name="target_pass" placeholder="设置访问密码" class="w-full p-2 text-[10px] rounded">
-                            <button type="submit" class="w-full bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] py-2 rounded hover:bg-cyan-900">更新授权</button>
-                        </form>
-                        <form action="/update_checkin_code" method="post" class="space-y-2">
-                            <input type="hidden" name="admin_pass" value="{{ auth.password }}">
-                            <input type="password" name="new_code" placeholder="修改签到确认码" class="w-full p-2 text-[10px] rounded">
-                            <button type="submit" class="w-full bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] py-2 rounded hover:bg-cyan-900">更新签到协议</button>
-                        </form>
-                        <form action="/update_duress_code" method="post" class="space-y-2">
-                            <input type="hidden" name="admin_pass" value="{{ auth.password }}">
-                            <input type="password" name="duress_code" placeholder="设置胁迫销毁码" class="w-full p-2 text-[10px] rounded">
-                            <button type="submit" class="w-full bg-red-950 text-red-400 border border-red-800 text-[10px] py-2 rounded hover:bg-red-900">更新胁迫协议</button>
-                        </form>
-                    </div>
-                </div>
-                {% endif %}
-                <button onclick="window.location.href='/'" class="mt-auto text-[10px] text-cyan-900 hover:text-cyan-400 uppercase tracking-widest transition-colors">强制断开隧道</button>
-            </div>
+                </aside>
 
-            <div class="lg:col-span-2 glass p-6 neon-border rounded-xl flex flex-col min-h-[400px]">
-                <div class="flex-1 overflow-y-auto no-scrollbar">
-                    <table class="w-full text-[11px] md:text-xs">
-                        <thead>
-                            <tr class="text-cyan-700 uppercase border-b border-cyan-900">
-                                <th class="pb-3 text-left font-normal tracking-widest">文件名</th>
-                                <th class="pb-3 text-right font-normal tracking-widest">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody class="text-cyan-500">
-                            {% if not files %}
-                            <tr><td colspan="2" class="py-10 text-center text-cyan-900 orbitron font-bold text-lg">保险库目前为空</td></tr>
-                            {% endif %}
+                <section class="panel neon-border rounded-[1.25rem] p-5 md:col-span-8 md:p-6">
+                    <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
+                        <div>
+                            <p class="section-title">Vault Files</p>
+                            <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">加密文件</h2>
+                        </div>
+                        <div class="text-sm text-cyan-100/55">单文件上限 {{ max_upload_mb }}MB，服务器返回后会清理临时明文文件。</div>
+                    </div>
+
+                    <div class="mt-5">
+                        {% if not files %}
+                        <div class="rounded-[1rem] border border-dashed border-cyan-900/80 px-4 py-10 text-center">
+                            <p class="orbitron text-lg text-cyan-700">VAULT EMPTY</p>
+                            <p class="mt-2 text-sm text-cyan-100/50">当前保险库中还没有文件。</p>
+                        </div>
+                        {% else %}
+                        <div class="mobile-stack">
                             {% for file in files %}
-                            <tr class="border-t border-cyan-900/20 hover:bg-cyan-400/5 transition-colors">
-                                <td class="py-3 truncate max-w-[150px] md:max-w-[300px]">{{ file }}</td>
-                                <td class="py-3 text-right">
+                            <article class="file-card">
+                                <div class="space-y-3">
+                                    <div>
+                                        <p class="section-title">Encrypted File</p>
+                                        <div class="mt-2 break-all text-sm font-medium text-cyan-100">{{ file }}</div>
+                                    </div>
                                     <form action="/download" method="post">
                                         <input type="hidden" name="filename" value="{{ file }}">
-                                        <input type="hidden" name="password" value="{{ auth.password }}">
-                                        <button type="submit" class="text-cyan-300 hover:text-white transition-colors">解密下载</button>
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <button type="submit" class="btn-neon w-full">解密下载</button>
                                     </form>
-                                </td>
-                            </tr>
+                                </div>
+                            </article>
                             {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <form action="/upload" method="post" enctype="multipart/form-data" class="pt-6 border-t border-cyan-900 flex flex-col sm:flex-row gap-3">
-                    <input type="hidden" name="password" value="{{ auth.password }}">
-                    <input type="file" name="file" required class="flex-1 text-[10px] file:bg-cyan-900 file:text-cyan-400 file:border-0 file:px-3 file:py-2 file:rounded-lg file:mr-3">
-                    <button type="submit" class="btn-neon px-6 py-2 rounded-lg text-[10px] orbitron font-bold">上传加密</button>
-                </form>
+                        </div>
+
+                        <table class="desktop-table mt-2 w-full text-left text-sm">
+                            <thead>
+                                <tr class="border-b border-cyan-900/70 text-cyan-600">
+                                    <th class="pb-3 font-medium">文件名</th>
+                                    <th class="pb-3 text-right font-medium">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for file in files %}
+                                <tr class="border-b border-cyan-900/30 align-middle">
+                                    <td class="py-4 pr-4 text-cyan-100/85">{{ file }}</td>
+                                    <td class="py-4 text-right">
+                                        <form action="/download" method="post" class="inline-flex">
+                                            <input type="hidden" name="filename" value="{{ file }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                            <button type="submit" class="btn-neon px-4 py-2">解密下载</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% endif %}
+                    </div>
+
+                    <form action="/upload" method="post" enctype="multipart/form-data" class="mt-6 space-y-4 border-t border-cyan-900/60 pt-5">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <div class="grid gap-4 md:grid-cols-[1fr_auto]">
+                            <input type="file" name="file" required class="file-field">
+                            <button type="submit" class="btn-neon orbitron w-full md:min-w-[180px]">上传加密</button>
+                        </div>
+                    </form>
+                </section>
             </div>
-        </div>
-        {% endif %}
-    </div>
+            {% endif %}
+        </section>
+    </main>
 
     <script>
-        let rem = {{ remaining_total_s or 0 }};
-        let duressActive = {{ 'true' if duress_active else 'false' }};
+        const remStart = {{ (remaining_total_s or 0)|int }};
+        const duressActive = {{ duress_active|tojson }};
+        const countdownEl = document.getElementById('countdown');
+        let remaining = remStart;
 
-        function update() {
-            if (rem <= 0) return;
-            let h = Math.floor(rem / 3600), m = Math.floor((rem % 3600) / 60), s = rem % 60;
-            let el = document.getElementById('countdown');
-            if (el) el.innerText = [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
-            if (!duressActive) rem--;
+        function renderCountdown(value) {
+            if (!countdownEl) return;
+            const safeValue = Math.max(0, value);
+            const hours = Math.floor(safeValue / 3600);
+            const minutes = Math.floor((safeValue % 3600) / 60);
+            const seconds = safeValue % 60;
+            countdownEl.textContent = [hours, minutes, seconds].map((item) => String(item).padStart(2, '0')).join(':');
         }
 
-        if (duressActive) {
-            document.body.classList.add('danger-border');
-            document.body.style.background = "radial-gradient(circle at center, #200 0%, #000 100%)";
-            let fastRem = rem;
-            let interval = setInterval(() => {
-                if (fastRem <= 0) {
-                    clearInterval(interval);
-                    window.location.href = "/";
+        renderCountdown(remaining);
+
+        if (remaining > 0) {
+            window.setInterval(() => {
+                if (!duressActive && remaining > 0) {
+                    remaining -= 1;
                 }
-                let h = Math.floor(fastRem / 3600), m = Math.floor((fastRem % 3600) / 60), s = fastRem % 60;
-                let el = document.getElementById('countdown');
-                if (el) el.innerText = [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
-                fastRem = Math.max(0, fastRem - 317);
-            }, 50);
-        } else if (rem > 0) {
-            setInterval(update, 1000);
-            update();
+                renderCountdown(remaining);
+            }, 1000);
         }
 
-        {% if msg %} alert("{{ msg }}"); {% endif %}
+        {% if msg %}
+        window.setTimeout(() => alert({{ msg|tojson }}), 50);
+        {% endif %}
     </script>
 </body>
 </html>

@@ -1,7 +1,11 @@
-import os
-import time
+import hashlib
+import hmac
 import json
+import os
 import shutil
+import subprocess
+import threading
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 from cryptography.hazmat.primitives import hashes, serialization
@@ -13,12 +17,15 @@ from Crypto.Cipher import AES
 load_dotenv()
 
 # 基础路径配置
-BASE_DIR = Path(os.getenv("AEGIS_DATA_DIR", "/root/aegis-vault/data"))
+BASE_DIR = Path(os.getenv("AEGIS_DATA_DIR", "./data"))
 KEY_DIR = BASE_DIR / "keys"
 VAULT_DIR = BASE_DIR / "vault"
 STATUS_FILE = BASE_DIR / "status.json"
 CHECKIN_HASH_PATH = KEY_DIR / "checkin.hash"
 DURESS_HASH_PATH = KEY_DIR / "duress.hash"
+SUPPORTED_USERS = ("admin", "user1", "user2", "user3")
+STATUS_LOCK = threading.RLock()
+DESTROY_LOCK = threading.RLock()
 
 # 超时时间 (默认72小时)
 CHECKIN_TIMEOUT = int(os.getenv("CHECKIN_TIMEOUT", 72)) * 3600
@@ -31,13 +38,45 @@ class CryptoManager:
 
     @staticmethod
     def get_user_key_path(username: str):
+        CryptoManager.validate_username(username)
         return KEY_DIR / f"{username}.key"
 
     @staticmethod
     def get_user_vault_path(username: str):
+        CryptoManager.validate_username(username)
         path = VAULT_DIR / username
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    @staticmethod
+    def list_supported_users():
+        return list(SUPPORTED_USERS)
+
+    @staticmethod
+    def validate_username(username: str):
+        if username not in SUPPORTED_USERS:
+            raise ValueError("不支持的用户")
+        return username
+
+    @staticmethod
+    def normalize_filename(filename: str) -> str:
+        safe_name = Path(filename or "").name
+        if not safe_name or safe_name in {".", ".."} or safe_name != filename:
+            raise ValueError("非法文件名")
+        return safe_name
+
+    @staticmethod
+    def get_encrypted_file_path(username: str, filename: str) -> Path:
+        safe_name = CryptoManager.normalize_filename(filename)
+        vault_path = CryptoManager.get_user_vault_path(username).resolve()
+        file_path = (vault_path / safe_name).resolve()
+        if file_path.parent != vault_path:
+            raise ValueError("非法文件路径")
+        return file_path
+
+    @staticmethod
+    def _hash_secret(secret: str) -> bytes:
+        return hashlib.sha256(secret.encode("utf-8")).digest()
 
     @staticmethod
     def init_admin(password: str, checkin_code: str):
@@ -53,6 +92,7 @@ class CryptoManager:
 
     @staticmethod
     def create_user_keys(username: str, password: str):
+        CryptoManager.validate_username(username)
         CryptoManager.ensure_dirs()
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=4096, backend=default_backend())
         pem = private_key.private_bytes(
@@ -72,30 +112,24 @@ class CryptoManager:
     @staticmethod
     def set_checkin_code(code: str):
         if not code: return
-        digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-        digest.update(code.encode())
-        with open(CHECKIN_HASH_PATH, "wb") as f: f.write(digest.finalize())
+        with open(CHECKIN_HASH_PATH, "wb") as f:
+            f.write(CryptoManager._hash_secret(code))
 
     @staticmethod
     def set_duress_code(code: str):
         if not code: return
-        digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-        digest.update(code.encode())
-        with open(DURESS_HASH_PATH, "wb") as f: f.write(digest.finalize())
+        with open(DURESS_HASH_PATH, "wb") as f:
+            f.write(CryptoManager._hash_secret(code))
 
     @staticmethod
     def verify_checkin(code: str) -> bool:
         if not code or not CHECKIN_HASH_PATH.exists(): return False
-        digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-        digest.update(code.encode())
-        return digest.finalize() == open(CHECKIN_HASH_PATH, "rb").read()
+        return hmac.compare_digest(CryptoManager._hash_secret(code), open(CHECKIN_HASH_PATH, "rb").read())
 
     @staticmethod
     def verify_duress(code: str) -> bool:
         if not code or not DURESS_HASH_PATH.exists(): return False
-        digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-        digest.update(code.encode())
-        return digest.finalize() == open(DURESS_HASH_PATH, "rb").read()
+        return hmac.compare_digest(CryptoManager._hash_secret(code), open(DURESS_HASH_PATH, "rb").read())
 
     @staticmethod
     def authenticate(password: str):
@@ -106,8 +140,7 @@ class CryptoManager:
             return "DURESS_TRIGGERED"
         
         # 尝试匹配所有可能的密钥
-        users = ["admin", "user1", "user2", "user3"]
-        for user in users:
+        for user in SUPPORTED_USERS:
             key_path = CryptoManager.get_user_key_path(user)
             if key_path.exists():
                 try:
@@ -119,6 +152,8 @@ class CryptoManager:
 
     @staticmethod
     def encrypt_file(file_content: bytes, filename: str, username: str):
+        CryptoManager.validate_username(username)
+        original_filename = CryptoManager.normalize_filename(filename)
         pub_key_path = KEY_DIR / f"{username}.pub"
         with open(pub_key_path, "rb") as f:
             public_key = serialization.load_pem_public_key(f.read(), backend=default_backend())
@@ -132,17 +167,17 @@ class CryptoManager:
         ciphertext, tag = cipher.encrypt_and_digest(file_content)
         final_data = len(enc_aes_key).to_bytes(4, 'big') + enc_aes_key + cipher.nonce + tag + ciphertext
         
-        vault_path = CryptoManager.get_user_vault_path(username)
-        with open(vault_path / (filename + ".aes"), "wb") as f:
+        target_path = CryptoManager.get_encrypted_file_path(username, f"{original_filename}.aes")
+        with open(target_path, "wb") as f:
             f.write(final_data)
 
     @staticmethod
     def decrypt_file(filename: str, username: str, password: str) -> bytes:
         with open(CryptoManager.get_user_key_path(username), "rb") as f:
             private_key = serialization.load_pem_private_key(f.read(), password=password.encode(), backend=default_backend())
-        
-        vault_path = CryptoManager.get_user_vault_path(username)
-        with open(vault_path / filename, "rb") as f:
+
+        encrypted_path = CryptoManager.get_encrypted_file_path(username, filename)
+        with open(encrypted_path, "rb") as f:
             data = f.read()
         
         idx = 4
@@ -165,37 +200,65 @@ class CryptoManager:
     @staticmethod
     def update_checkin():
         BASE_DIR.mkdir(parents=True, exist_ok=True)
-        with open(STATUS_FILE, "w") as f:
-            json.dump({"last_checkin": int(time.time()), "destroyed": False}, f)
+        with STATUS_LOCK:
+            with open(STATUS_FILE, "w") as f:
+                json.dump({"last_checkin": int(time.time()), "destroyed": False}, f)
 
     @staticmethod
     def get_status():
         if not STATUS_FILE.exists(): return {"last_checkin": 0, "destroyed": False}
         try:
-            with open(STATUS_FILE, "r") as f: return json.load(f)
+            with STATUS_LOCK:
+                with open(STATUS_FILE, "r") as f: return json.load(f)
         except: return {"last_checkin": 0, "destroyed": False}
 
     @staticmethod
-    def destroy_all():
-        # 1. 粉碎所有密钥
-        if KEY_DIR.exists():
-            os.system(f"find {KEY_DIR} -type f -exec shred -u -z -n 3 {{}} +")
-            shutil.rmtree(KEY_DIR, ignore_errors=True)
-        
-        # 2. 粉碎所有加密数据
-        if VAULT_DIR.exists():
-            os.system(f"find {VAULT_DIR} -type f -exec shred -u -z -n 1 {{}} +")
-            shutil.rmtree(VAULT_DIR, ignore_errors=True)
+    def _shred_file(path: Path, passes: int):
+        if not path.exists() or not path.is_file():
+            return
 
-        # 3. 标记状态
-        with open(STATUS_FILE, "w") as f:
-            json.dump({"last_checkin": 0, "destroyed": True}, f)
+        if shutil.which("shred"):
+            subprocess.run(
+                ["shred", "-u", "-z", "-n", str(passes), str(path)],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        if path.exists():
+            path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _shred_tree(root: Path, passes: int):
+        if not root.exists():
+            return
+        for path in sorted((p for p in root.rglob("*") if p.is_file()), reverse=True):
+            CryptoManager._shred_file(path, passes)
+
+    @staticmethod
+    def destroy_all():
+        with DESTROY_LOCK:
+            if KEY_DIR.exists():
+                CryptoManager._shred_tree(KEY_DIR, 3)
+                shutil.rmtree(KEY_DIR, ignore_errors=True)
+
+            if VAULT_DIR.exists():
+                CryptoManager._shred_tree(VAULT_DIR, 1)
+                shutil.rmtree(VAULT_DIR, ignore_errors=True)
+
+            BASE_DIR.mkdir(parents=True, exist_ok=True)
+            with STATUS_LOCK:
+                with open(STATUS_FILE, "w") as f:
+                    json.dump({"last_checkin": 0, "destroyed": True}, f)
 
     @staticmethod
     def reset_system():
-        if STATUS_FILE.exists():
-            with open(STATUS_FILE, "w") as f:
-                json.dump({"last_checkin": 0, "destroyed": False}, f)
-        if KEY_DIR.exists(): shutil.rmtree(KEY_DIR, ignore_errors=True)
-        if VAULT_DIR.exists(): shutil.rmtree(VAULT_DIR, ignore_errors=True)
-        CryptoManager.ensure_dirs()
+        with DESTROY_LOCK:
+            BASE_DIR.mkdir(parents=True, exist_ok=True)
+            with STATUS_LOCK:
+                with open(STATUS_FILE, "w") as f:
+                    json.dump({"last_checkin": 0, "destroyed": False}, f)
+            if KEY_DIR.exists():
+                shutil.rmtree(KEY_DIR, ignore_errors=True)
+            if VAULT_DIR.exists():
+                shutil.rmtree(VAULT_DIR, ignore_errors=True)
+            CryptoManager.ensure_dirs()
