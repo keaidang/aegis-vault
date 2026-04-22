@@ -355,7 +355,6 @@ async def setup(
     master_password: str = Form(...),
     confirm_master_password: str = Form(...),
     checkin_code: str = Form(...),
-    confirm_checkin_code: str | None = Form(None),
 ):
     if (KEY_DIR / "admin.key").exists():
         return redirect_with_message("系统已初始化")
@@ -366,9 +365,6 @@ async def setup(
     valid, msg = validate_password_strength(master_password)
     if not valid:
         return redirect_with_message(msg)
-    
-    if confirm_checkin_code is not None and checkin_code != confirm_checkin_code:
-        return redirect_with_message("两次输入的签到码不一致")
     
     valid, msg = validate_code_strength(checkin_code)
     if not valid:
