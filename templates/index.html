@@ -478,7 +478,7 @@
                     {% endif %}
                     {% if auth %}
                     <span id="idle-countdown" class="status-pill idle-pill">60s</span>
-                    <span class="status-pill">{{ auth.user }}</span>
+                    <span class="status-pill">{{ "admin" if auth.user == "admin" else "USER" }}</span>
                     {% endif %}
                 </div>
             </div>
@@ -554,7 +554,7 @@
                     <div class="space-y-5 sidebar-scroll">
                         <div class="metric">
                             <p class="section-title">Session</p>
-                            <div class="mt-2 orbitron text-xl text-cyan-300 md:text-2xl">{{ auth.user|upper }}</div>
+                            <div class="mt-2 orbitron text-xl text-cyan-300 md:text-2xl">{{ "ADMIN" if auth.user == "admin" else "USER" }}</div>
                             <p class="mt-3 text-sm leading-6 text-cyan-100/65">
                                 当前通过服务端会话访问，敏感口令不再下发到前端。
                                 {% if auth.is_admin and vault_size_mb is not none %}

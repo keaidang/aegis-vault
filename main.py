@@ -3,7 +3,6 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from urllib.parse import urlencode
 
 import uvicorn
 from dotenv import load_dotenv
@@ -27,6 +26,7 @@ MAX_VAULT_SIZE_BYTES = int(os.getenv("MAX_VAULT_SIZE_MB", 1024)) * 1024 * 1024
 MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", 64)) * 1024 * 1024
 SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "aegis_session")
 SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+FLASH_COOKIE_NAME = "aegis_flash"
 
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 session_store = SessionStore(ttl_seconds=SESSION_TTL_SECONDS)
@@ -50,8 +50,20 @@ def clear_session_cookie(response: Response) -> None:
 
 
 def redirect_with_message(message: str | None = None) -> RedirectResponse:
-    query = f"?{urlencode({'msg': message})}" if message else ""
-    return RedirectResponse(url=f"/{query}", status_code=303)
+    response = RedirectResponse(url="/", status_code=303)
+    if message:
+        response.set_cookie(
+            key=FLASH_COOKIE_NAME,
+            value=message,
+            httponly=True,
+            secure=SESSION_COOKIE_SECURE,
+            samesite="lax",
+            max_age=15,
+            path="/",
+        )
+    else:
+        response.delete_cookie(key=FLASH_COOKIE_NAME, path="/")
+    return response
 
 
 def client_address(request: Request) -> str:
@@ -268,9 +280,12 @@ async def startup_event():
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request, msg: str | None = None):
-    context = build_context(request, msg=msg)
-    return templates.TemplateResponse(request=request, name="index.html", context=context)
+async def index(request: Request):
+    context = build_context(request, msg=request.cookies.get(FLASH_COOKIE_NAME))
+    response = templates.TemplateResponse(request=request, name="index.html", context=context)
+    if request.cookies.get(FLASH_COOKIE_NAME):
+        response.delete_cookie(key=FLASH_COOKIE_NAME, path="/")
+    return response
 
 
 @app.post("/login")
