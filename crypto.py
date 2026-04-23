@@ -28,8 +28,17 @@ SUPPORTED_USERS = ("admin", "user1", "user2", "user3")
 STATUS_LOCK = threading.RLock()
 DESTROY_LOCK = threading.RLock()
 
-# 超时时间 (默认72小时)
-CHECKIN_TIMEOUT = int(os.getenv("CHECKIN_TIMEOUT", 72)) * 3600
+def _load_checkin_timeout_seconds() -> int:
+    """读取签到超时时间，优先支持秒级测试配置。"""
+    if os.getenv("CHECKIN_TIMEOUT_SECONDS"):
+        return max(1, int(os.getenv("CHECKIN_TIMEOUT_SECONDS", "60")))
+    if os.getenv("CHECKIN_TIMEOUT_MINUTES"):
+        return max(1, int(os.getenv("CHECKIN_TIMEOUT_MINUTES", "1"))) * 60
+    return max(1, int(os.getenv("CHECKIN_TIMEOUT", "72"))) * 3600
+
+
+# 超时时间（默认72小时，可通过 CHECKIN_TIMEOUT_SECONDS 做秒级测试）
+CHECKIN_TIMEOUT = _load_checkin_timeout_seconds()
 
 class CryptoManager:
     # 状态文件 HMAC 密钥（与私钥分离）

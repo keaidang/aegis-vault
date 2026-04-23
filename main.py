@@ -3,6 +3,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 import uvicorn
 from dotenv import load_dotenv
@@ -26,6 +27,7 @@ MAX_VAULT_SIZE_BYTES = int(os.getenv("MAX_VAULT_SIZE_MB", 1024)) * 1024 * 1024
 MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", 64)) * 1024 * 1024
 SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "aegis_session")
 SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+MONITOR_INTERVAL_SECONDS = int(os.getenv("MONITOR_INTERVAL_SECONDS", "5"))
 FLASH_COOKIE_NAME = "aegis_flash"
 
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
@@ -54,7 +56,7 @@ def redirect_with_message(message: str | None = None) -> RedirectResponse:
     if message:
         response.set_cookie(
             key=FLASH_COOKIE_NAME,
-            value=message,
+            value=quote(message, safe=""),
             httponly=True,
             secure=SESSION_COOKIE_SECURE,
             samesite="lax",
@@ -248,7 +250,7 @@ def monitor_switch() -> None:
                     CryptoManager.destroy_all()
                     log_event(AuditEvent.SYSTEM_DESTROYED, details={"reason": "checkin_timeout", "elapsed_seconds": elapsed}, success=True)
                     session_store.clear()
-        time.sleep(60)
+        time.sleep(MONITOR_INTERVAL_SECONDS)
 
 
 @app.middleware("http")
@@ -281,9 +283,10 @@ async def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    context = build_context(request, msg=request.cookies.get(FLASH_COOKIE_NAME))
+    flash_message = request.cookies.get(FLASH_COOKIE_NAME)
+    context = build_context(request, msg=unquote(flash_message) if flash_message else None)
     response = templates.TemplateResponse(request=request, name="index.html", context=context)
-    if request.cookies.get(FLASH_COOKIE_NAME):
+    if flash_message:
         response.delete_cookie(key=FLASH_COOKIE_NAME, path="/")
     return response
 
