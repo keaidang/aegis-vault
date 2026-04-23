@@ -13,6 +13,20 @@ NOTES_LOCK = threading.RLock()
 
 class NotesManager:
     @staticmethod
+    def _normalize_note(note: dict, note_id: str | None = None) -> dict:
+        normalized_note = dict(note)
+        now = int(time.time())
+        normalized_note.setdefault("title", "未命名笔记")
+        normalized_note.setdefault("content", "")
+        normalized_note.setdefault("created_at", now)
+        normalized_note.setdefault("updated_at", normalized_note["created_at"])
+        normalized_note.setdefault("modification_history", [normalized_note["updated_at"]])
+        normalized_note["attachments"] = [dict(item) for item in normalized_note.get("attachments", [])]
+        if note_id is not None:
+            normalized_note["note_id"] = note_id
+        return normalized_note
+
+    @staticmethod
     def _load_config() -> dict:
         if not NOTES_CONFIG_PATH.exists():
             return {"enabled_users": []}
@@ -130,17 +144,16 @@ class NotesManager:
     def get_note(username: str, note_id: str, private_key) -> dict:
         payload = CryptoManager.decrypt_note_payload(username, note_id, private_key)
         note = json.loads(payload.decode("utf-8"))
-        note["note_id"] = note_id
-        note.setdefault("title", "未命名笔记")
-        note.setdefault("content", "")
-        note.setdefault("created_at", int(time.time()))
-        note.setdefault("updated_at", note["created_at"])
-        note.setdefault("modification_history", [note["updated_at"]])
-        note.setdefault("attachments", [])
-        return note
+        return NotesManager._normalize_note(note, note_id=note_id)
 
     @staticmethod
-    def save_note(username: str, note_id: str | None, title: str, content: str, private_key) -> str:
+    def save_note(
+        username: str,
+        note_id: str | None,
+        title: str,
+        content: str,
+        existing_note: dict | None = None,
+    ) -> tuple[str, dict]:
         title = (title or "").strip() or "未命名笔记"
         content = content or ""
         now = int(time.time())
@@ -149,7 +162,9 @@ class NotesManager:
         created_at = now
         modification_history = [now]
         if note_id:
-            existing = NotesManager.get_note(username, note_id, private_key)
+            if existing_note is None:
+                raise ValueError("note_unlock_required")
+            existing = NotesManager._normalize_note(existing_note, note_id=note_id)
             attachments = existing.get("attachments", [])
             created_at = existing.get("created_at", now)
             modification_history = existing.get("modification_history", [created_at])
@@ -170,7 +185,8 @@ class NotesManager:
             username=username,
             note_id=note_id,
         )
-        return note_id
+        note["note_id"] = note_id
+        return note_id, note
 
     @staticmethod
     def delete_note(username: str, note_id: str) -> None:
@@ -180,8 +196,14 @@ class NotesManager:
         CryptoManager.secure_delete_path(note_dir, passes=1)
 
     @staticmethod
-    def add_attachment(username: str, note_id: str, filename: str, content: bytes, private_key) -> dict:
-        note = NotesManager.get_note(username, note_id, private_key)
+    def add_attachment(
+        username: str,
+        note_id: str,
+        filename: str,
+        content: bytes,
+        existing_note: dict,
+    ) -> tuple[dict, dict]:
+        note = NotesManager._normalize_note(existing_note, note_id=note_id)
         attachment_id = uuid.uuid4().hex
         safe_name = CryptoManager.normalize_filename(filename)
         attachment_path = NotesManager._attachment_path(username, note_id, attachment_id)
@@ -198,8 +220,8 @@ class NotesManager:
             "created_at": int(time.time()),
         }
         note.setdefault("attachments", []).append(attachment)
-        NotesManager._persist_note(username, note_id, note, private_key)
-        return attachment
+        NotesManager._persist_note(username, note_id, note)
+        return attachment, note
 
     @staticmethod
     def list_attachments(username: str, note_id: str, private_key) -> list[dict]:
@@ -222,7 +244,7 @@ class NotesManager:
         return attachment, content
 
     @staticmethod
-    def delete_attachment(username: str, note_id: str, attachment_id: str, private_key) -> dict:
+    def delete_attachment(username: str, note_id: str, attachment_id: str, private_key) -> tuple[dict, dict]:
         note = NotesManager.get_note(username, note_id, private_key)
         attachments = note.get("attachments", [])
         attachment = next((item for item in attachments if item.get("attachment_id") == attachment_id), None)
@@ -230,8 +252,8 @@ class NotesManager:
             raise FileNotFoundError(attachment_id)
         note["attachments"] = [item for item in attachments if item.get("attachment_id") != attachment_id]
         CryptoManager.secure_delete_path(NotesManager._attachment_path(username, note_id, attachment_id), passes=1)
-        NotesManager._persist_note(username, note_id, note, private_key)
-        return attachment
+        NotesManager._persist_note(username, note_id, note)
+        return attachment, note
 
     @staticmethod
     def _attachment_path(username: str, note_id: str, attachment_id: str) -> Path:
@@ -241,7 +263,7 @@ class NotesManager:
         return attachments_dir / f"{safe_attachment_id}.aes"
 
     @staticmethod
-    def _persist_note(username: str, note_id: str, note: dict, private_key) -> None:
+    def _persist_note(username: str, note_id: str, note: dict) -> None:
         now = int(time.time())
         note["updated_at"] = now
         history = note.setdefault("modification_history", [])

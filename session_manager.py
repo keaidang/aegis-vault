@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import secrets
 import threading
@@ -37,7 +38,7 @@ class SessionStore:
         }
         with self._lock:
             self._sessions[session_id] = session
-        return session_id, session.copy()
+        return session_id, copy.deepcopy(session)
 
     def get(self, session_id: str | None, client_ip: str | None = None, user_agent: str | None = None) -> dict | None:
         if not session_id:
@@ -60,7 +61,47 @@ class SessionStore:
                     session["_fingerprint_mismatch"] = True
             
             session["expires_at"] = now + self.ttl_seconds
-            return session.copy()
+            return copy.deepcopy(session)
+
+    def set_active_note(self, session_id: str | None, note_id: str, note: dict) -> None:
+        if not session_id:
+            return
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return
+            session["active_note"] = {
+                "note_id": note_id,
+                "note": copy.deepcopy(note),
+            }
+
+    def get_active_note(self, session_id: str | None, note_id: str | None = None) -> dict | None:
+        if not session_id:
+            return None
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return None
+            active_note = session.get("active_note")
+            if not isinstance(active_note, dict):
+                return None
+            if note_id is not None and active_note.get("note_id") != note_id:
+                return None
+            return copy.deepcopy(active_note)
+
+    def clear_active_note(self, session_id: str | None, note_id: str | None = None) -> None:
+        if not session_id:
+            return
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return
+            active_note = session.get("active_note")
+            if not isinstance(active_note, dict):
+                return
+            if note_id is not None and active_note.get("note_id") != note_id:
+                return
+            session.pop("active_note", None)
 
     def destroy(self, session_id: str | None) -> None:
         if not session_id:

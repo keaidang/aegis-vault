@@ -291,6 +291,7 @@ def build_vault_context(request: Request, msg: str | None = None) -> dict:
 
 def build_notes_context(
     request: Request,
+    session_id: str | None = None,
     session: dict | None = None,
     msg: str | None = None,
     selected_note_id: str | None = None,
@@ -303,7 +304,9 @@ def build_notes_context(
     context["note_view_requires_password"] = bool(selected_note_id)
 
     if not session:
-        _, current_session = get_current_session(request)
+        current_session_id, current_session = get_current_session(request)
+        if session_id is None:
+            session_id = current_session_id
         session = current_session if current_session and current_session.get("mode") == "notes" else None
     if not session or not context["auth"]:
         return context
@@ -315,8 +318,19 @@ def build_notes_context(
         entry["updated_at_label"] = format_local_timestamp(entry.get("updated_at"))
         note_entries.append(entry)
 
+    active_note = session_store.get_active_note(session_id, selected_note_id) if selected_note_id else None
+    if not selected_note_id:
+        active_note = session_store.get_active_note(session_id)
+        if active_note:
+            selected_note_id = active_note["note_id"]
+            selected_note = active_note["note"]
+
     if not selected_note_id and note_entries:
         selected_note_id = note_entries[0]["note_id"]
+        active_note = session_store.get_active_note(session_id, selected_note_id)
+
+    if selected_note is None and active_note:
+        selected_note = active_note["note"]
 
     context["note_entries"] = note_entries
     context["selected_note"] = decorate_note(selected_note) if selected_note else None
@@ -449,13 +463,17 @@ async def index(request: Request):
 
 @app.get("/notes", response_class=HTMLResponse)
 async def notes_page(request: Request, note: str | None = Query(default=None)):
-    _, session = get_current_session(request)
+    session_id, session = get_current_session(request)
     if not session or session.get("mode") != "notes":
         return render_page(request, "notes.html", build_notes_context(request, selected_note_id=note))
     if not NotesManager.is_enabled(session["user"]):
         session_store.destroy(request.cookies.get(SESSION_COOKIE_NAME))
         return render_page(request, "notes.html", build_notes_context(request, msg="当前账户未启用神盾笔记"))
-    return render_page(request, "notes.html", build_notes_context(request, session=session, selected_note_id=note))
+    return render_page(
+        request,
+        "notes.html",
+        build_notes_context(request, session_id=session_id, session=session, selected_note_id=note),
+    )
 
 
 @app.get("/logs", response_class=HTMLResponse)
@@ -881,7 +899,7 @@ async def view_note(
     note_id: str = Form(...),
     note_password: str = Form(...),
 ):
-    _, session = require_note_session(request, csrf_token=csrf_token)
+    session_id, session = require_note_session(request, csrf_token=csrf_token)
     client_ip = client_address(request)
     scope_key = f"{client_ip}:{session['user']}:{note_id}"
     retry_after = rate_limiter.check("view_note", scope_key)
@@ -915,6 +933,7 @@ async def view_note(
         raise HTTPException(status_code=404, detail="笔记不存在") from exc
 
     rate_limiter.reset("view_note", scope_key)
+    session_store.set_active_note(session_id, note_id, selected_note)
     log_event(
         AuditEvent.NOTE_ACCESS_SUCCESS,
         user=session["user"],
@@ -925,7 +944,13 @@ async def view_note(
     return render_page(
         request,
         "notes.html",
-        build_notes_context(request, session=session, selected_note_id=note_id, selected_note=selected_note),
+        build_notes_context(
+            request,
+            session_id=session_id,
+            session=session,
+            selected_note_id=note_id,
+            selected_note=selected_note,
+        ),
     )
 
 
@@ -936,20 +961,29 @@ async def save_note(
     note_id: str = Form(""),
     title: str = Form(""),
     content: str = Form(""),
-    note_password: str = Form(...),
 ):
-    _, session = require_note_session(request, csrf_token=csrf_token)
-    note_private_key = verify_note_action_password(session["user"], note_password)
-    if note_private_key is None:
+    session_id, session = require_note_session(request, csrf_token=csrf_token)
+    note_id = note_id.strip()
+    existing_note = None
+    if note_id:
+        active_note = session_store.get_active_note(session_id, note_id)
+        if not active_note:
+            return redirect_with_message("请先输入笔记密码查看当前笔记", f"/notes?note={note_id}")
+        existing_note = active_note["note"]
+
+    try:
+        saved_note_id, saved_note = NotesManager.save_note(
+            username=session["user"],
+            note_id=note_id or None,
+            title=title,
+            content=content,
+            existing_note=existing_note,
+        )
+    except ValueError:
         redirect_note = note_id or "create"
-        return redirect_with_message("笔记密码错误", f"/notes?note={redirect_note}")
-    saved_note_id = NotesManager.save_note(
-        username=session["user"],
-        note_id=note_id or None,
-        title=title,
-        content=content,
-        private_key=note_private_key,
-    )
+        return redirect_with_message("请先输入笔记密码查看当前笔记", f"/notes?note={redirect_note}")
+
+    session_store.set_active_note(session_id, saved_note_id, saved_note)
     log_event(
         AuditEvent.NOTE_SAVED,
         user=session["user"],
@@ -967,7 +1001,7 @@ async def delete_note(
     note_id: str = Form(...),
     note_password: str = Form(...),
 ):
-    _, session = require_note_session(request, csrf_token=csrf_token)
+    session_id, session = require_note_session(request, csrf_token=csrf_token)
     client_ip = client_address(request)
     scope_key = f"{client_ip}:{session['user']}"
     retry_after = rate_limiter.check("delete_note", scope_key)
@@ -1001,6 +1035,7 @@ async def delete_note(
         raise HTTPException(status_code=404, detail="笔记不存在") from exc
 
     rate_limiter.reset("delete_note", scope_key)
+    session_store.clear_active_note(session_id, note_id)
     log_event(
         AuditEvent.NOTE_DELETED,
         user=session["user"],
@@ -1017,12 +1052,11 @@ async def upload_note_attachment(
     csrf_token: str = Form(...),
     note_id: str = Form(...),
     file: UploadFile = File(...),
-    note_password: str = Form(...),
 ):
-    _, session = require_note_session(request, csrf_token=csrf_token)
-    note_private_key = verify_note_action_password(session["user"], note_password)
-    if note_private_key is None:
-        return redirect_with_message("笔记密码错误", f"/notes?note={note_id}")
+    session_id, session = require_note_session(request, csrf_token=csrf_token)
+    active_note = session_store.get_active_note(session_id, note_id)
+    if not active_note:
+        return redirect_with_message("请先输入笔记密码查看当前笔记", f"/notes?note={note_id}")
     if not str(file.content_type or "").startswith("image/"):
         raise HTTPException(status_code=400, detail="笔记附件仅支持图片文件")
     try:
@@ -1034,7 +1068,14 @@ async def upload_note_attachment(
     if get_vault_size() + len(content) > MAX_VAULT_SIZE_BYTES:
         raise HTTPException(status_code=400, detail=f"保险库已满 ({int(MAX_VAULT_SIZE_BYTES / (1024 * 1024))}MB 限制)")
 
-    attachment = NotesManager.add_attachment(session["user"], note_id, safe_name, content, note_private_key)
+    attachment, updated_note = NotesManager.add_attachment(
+        session["user"],
+        note_id,
+        safe_name,
+        content,
+        active_note["note"],
+    )
+    session_store.set_active_note(session_id, note_id, updated_note)
     log_event(
         AuditEvent.NOTE_ATTACHMENT_UPLOADED,
         user=session["user"],
@@ -1092,7 +1133,7 @@ async def delete_note_attachment(
     attachment_id: str = Form(...),
     note_password: str = Form(...),
 ):
-    _, session = require_note_session(request, csrf_token=csrf_token)
+    session_id, session = require_note_session(request, csrf_token=csrf_token)
     client_ip = client_address(request)
     scope_key = f"{client_ip}:{session['user']}"
     retry_after = rate_limiter.check("delete_note_attachment", scope_key)
@@ -1124,7 +1165,12 @@ async def delete_note_attachment(
         note_private_key = verify_note_action_password(session["user"], note_password)
         if note_private_key is None:
             raise ValueError("invalid_note_password")
-        attachment = NotesManager.delete_attachment(session["user"], note_id, attachment_id, note_private_key)
+        attachment, updated_note = NotesManager.delete_attachment(
+            session["user"],
+            note_id,
+            attachment_id,
+            note_private_key,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="附件不存在") from exc
     except ValueError:
@@ -1141,6 +1187,7 @@ async def delete_note_attachment(
         return redirect_with_message("笔记密码错误", f"/notes?note={note_id}")
 
     rate_limiter.reset("delete_note_attachment", scope_key)
+    session_store.set_active_note(session_id, note_id, updated_note)
     log_event(
         AuditEvent.NOTE_ATTACHMENT_DELETED,
         user=session["user"],

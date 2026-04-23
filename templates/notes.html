@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block subtitle %}神盾笔记独立于保险库密码与会话。{% endblock %}
+{% block subtitle %}神盾笔记是基于RSA加密的安全便签。{% endblock %}
 
 {% block page_content %}
     {% if not auth %}
@@ -93,14 +93,15 @@
                             </form>
                             {% endif %}
 
+                            {% if selected_note or selected_note_id == 'create' or not selected_note_id %}
                             <form action="/notes/save" method="post" class="stack-form">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="note_id" value="{{ selected_note.note_id if selected_note else '' }}">
                                 <input type="text" name="title" maxlength="120" value="{{ selected_note.title if selected_note else '' }}" placeholder="笔记标题" class="field">
                                 <textarea name="content" placeholder="输入加密笔记内容" class="textarea-field">{{ selected_note.content if selected_note else '' }}</textarea>
-                                <input type="password" name="note_password" required autocomplete="current-password" placeholder="输入笔记密码保存" class="field">
                                 <button type="submit" class="btn-neon orbitron">保存笔记</button>
                             </form>
+                            {% endif %}
 
                             {% if selected_note %}
                             <form action="/notes/delete" method="post" class="stack-form">
@@ -150,7 +151,6 @@
                                         <input type="file" name="file" accept="image/*" required class="file-field">
                                         <button type="submit" class="btn-neon">上传附件</button>
                                     </div>
-                                    <input type="password" name="note_password" required autocomplete="current-password" placeholder="输入笔记密码上传附件" class="field">
                                 </form>
 
                                 {% if not selected_note.attachments %}
