@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block subtitle %}神盾笔记独立于保险库密码与会话。{% endblock %}
+
+{% block page_content %}
+    {% if not auth %}
+    <div class="mx-auto mt-6 max-w-2xl">
+        <div class="panel neon-border rounded-[1.25rem] px-5 py-6 md:px-7 md:py-8">
+            <div class="space-y-4">
+                <div class="text-center">
+                    <p class="section-title">Shield Notes</p>
+                    <h2 class="orbitron mt-2 text-xl text-cyan-300 md:text-2xl">输入笔记密码</h2>
+                    <p class="mt-3 text-sm leading-6 text-cyan-100/65">笔记入口与保险库入口独立，输入笔记密码只进入笔记功能。</p>
+                </div>
+                <form action="/notes/login" method="post" class="stack-form">
+                    <input type="password" name="password" required autocomplete="current-password" placeholder="输入笔记密码" class="field">
+                    <button type="submit" class="btn-neon orbitron w-full">进入神盾笔记</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="mt-6 auth-layout">
+        <aside class="panel neon-border rounded-[1.25rem] p-5 md:p-6 sidebar-panel">
+            <div class="space-y-5 sidebar-scroll">
+                <div class="metric">
+                    <p class="section-title">Notebook Session</p>
+                    <div class="mt-2 orbitron text-xl text-cyan-300 md:text-2xl">AEGIS NOTES</div>
+                    <p class="mt-3 text-sm leading-6 text-cyan-100/65">当前笔记账户：{{ auth.user }}</p>
+                </div>
+
+                <div class="nav-grid">
+                    <a href="/notes" class="nav-link active">神盾笔记</a>
+                    <a href="/" class="nav-link">保险库入口</a>
+                    <span class="nav-link" style="opacity: 0.45;">隔离模式</span>
+                </div>
+
+                <form id="logout-form" action="/logout" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn-muted orbitron w-full">断开会话</button>
+                </form>
+            </div>
+        </aside>
+
+        <section class="panel neon-border rounded-[1.25rem] p-5 md:p-6 content-panel">
+            <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
+                <div>
+                    <p class="section-title">Shield Notes</p>
+                    <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">独立加密笔记区</h2>
+                </div>
+                <div class="text-sm leading-6 text-cyan-100/55">笔记密码不进入保险库；查看每一篇笔记都要重新输入笔记密码。</div>
+            </div>
+
+            <div class="mt-5 notes-shell">
+                <aside class="note-list-panel">
+                    <div class="space-y-4 content-scroll pr-1">
+                        <a href="/notes?note=create" class="btn-neon orbitron w-full">新建笔记</a>
+
+                        {% if not note_entries %}
+                        <div class="empty-state">
+                            <p class="orbitron text-base text-cyan-700">NO NOTES</p>
+                            <p class="mt-2 text-sm">当前还没有笔记。</p>
+                        </div>
+                        {% else %}
+                            {% for note in note_entries %}
+                            <a href="/notes?note={{ note.note_id }}" class="note-menu-card {% if selected_note_id == note.note_id %}is-active{% endif %} block no-underline text-inherit">
+                                <div class="space-y-2">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="min-w-0 flex-1">
+                                            <p class="section-title">Encrypted Note</p>
+                                            <div class="mt-2 text-sm font-medium text-cyan-100">
+                                                <span class="note-title-text" title="{{ note.label }}">{{ note.label }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="text-xs leading-6 text-cyan-100/55">更新 {{ note.updated_at_label }}</div>
+                                </div>
+                            </a>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </aside>
+
+                <section class="note-editor-panel">
+                    <div class="content-scroll pr-1">
+                        <div class="space-y-4">
+                            {% if selected_note_id and selected_note_id != 'create' and note_view_requires_password %}
+                            <form action="/notes/view" method="post" class="panel neon-border rounded-[1.25rem] p-5 stack-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="note_id" value="{{ selected_note_id }}">
+                                <div>
+                                    <p class="section-title">Decrypt Note</p>
+                                    <h3 class="mt-2 text-base font-semibold text-cyan-200">输入笔记密码查看当前笔记</h3>
+                                </div>
+                                <input type="password" name="note_password" required autocomplete="current-password" placeholder="输入笔记密码查看该笔记" class="field">
+                                <button type="submit" class="btn-neon orbitron">查看当前笔记</button>
+                            </form>
+                            {% endif %}
+
+                            <form action="/notes/save" method="post" class="stack-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="note_id" value="{{ selected_note.note_id if selected_note else '' }}">
+                                <input type="text" name="title" maxlength="120" value="{{ selected_note.title if selected_note else '' }}" placeholder="笔记标题" class="field">
+                                <textarea name="content" placeholder="输入加密笔记内容" class="textarea-field">{{ selected_note.content if selected_note else '' }}</textarea>
+                                <input type="password" name="note_password" required autocomplete="current-password" placeholder="输入笔记密码保存" class="field">
+                                <button type="submit" class="btn-neon orbitron">保存笔记</button>
+                            </form>
+
+                            {% if selected_note %}
+                            <form action="/notes/delete" method="post" class="stack-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="note_id" value="{{ selected_note.note_id }}">
+                                <input type="password" name="note_password" required autocomplete="current-password" placeholder="输入笔记密码后删除" class="download-password-field">
+                                <button type="submit" class="btn-danger" onclick="return window.confirm('确认删除当前笔记？');">删除笔记</button>
+                            </form>
+
+                            <details class="admin-dropdown">
+                                <summary class="admin-toggle">
+                                    <div class="text-left">
+                                        <p class="section-title">Details</p>
+                                        <h3 class="mt-2 text-base font-semibold text-cyan-200">详细信息</h3>
+                                    </div>
+                                    <span class="admin-toggle-icon text-xl text-cyan-300">⌄</span>
+                                </summary>
+                                <div class="admin-content space-y-4">
+                                    <div class="info-card text-sm leading-7 text-cyan-100/80">
+                                        <div>创建时间：{{ selected_note.created_at_label }} (UTC+8)</div>
+                                        <div>最后修改：{{ selected_note.updated_at_label }} (UTC+8)</div>
+                                    </div>
+                                    <div class="info-card">
+                                        <p class="section-title">Modification History</p>
+                                        <ol class="history-list mt-3">
+                                            {% for item in selected_note.modification_history_labels %}
+                                            <li>{{ item }} (UTC+8)</li>
+                                            {% endfor %}
+                                        </ol>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <div class="space-y-4">
+                                <div class="flex items-end justify-between gap-4">
+                                    <div>
+                                        <p class="section-title">Attachments</p>
+                                        <h3 class="mt-2 text-base font-semibold text-cyan-200">图片附件</h3>
+                                    </div>
+                                    <span class="status-pill">{{ selected_note.attachment_count }}</span>
+                                </div>
+
+                                <form action="/notes/attachment/upload" method="post" enctype="multipart/form-data" class="stack-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="hidden" name="note_id" value="{{ selected_note.note_id }}">
+                                    <div class="grid gap-4 md:grid-cols-[1fr_auto]">
+                                        <input type="file" name="file" accept="image/*" required class="file-field">
+                                        <button type="submit" class="btn-neon">上传附件</button>
+                                    </div>
+                                    <input type="password" name="note_password" required autocomplete="current-password" placeholder="输入笔记密码上传附件" class="field">
+                                </form>
+
+                                {% if not selected_note.attachments %}
+                                <div class="empty-state">当前没有附件。</div>
+                                {% else %}
+                                <div class="attachment-grid">
+                                    {% for attachment in selected_note.attachments %}
+                                    <article class="attachment-card">
+                                        <div class="space-y-3">
+                                            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                                <div class="min-w-0">
+                                                    <div class="text-sm font-medium text-cyan-100">
+                                                        <span class="file-name-text" title="{{ attachment.name }}">{{ attachment.name }}</span>
+                                                    </div>
+                                                    <div class="mt-2 text-xs text-cyan-100/55">上传于 {{ attachment.created_at_label }} (UTC+8)</div>
+                                                </div>
+                                                <div class="status-pill">{{ attachment.size_bytes }} B</div>
+                                            </div>
+                                            <div class="attachment-actions">
+                                                <form action="/notes/attachment/download" method="post" class="download-inline-form">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                                    <input type="hidden" name="note_id" value="{{ selected_note.note_id }}">
+                                                    <input type="hidden" name="attachment_id" value="{{ attachment.attachment_id }}">
+                                                    <input type="password" name="note_password" required autocomplete="current-password" placeholder="笔记密码" class="download-password-field">
+                                                    <button type="submit" class="btn-neon">下载附件</button>
+                                                </form>
+                                                <form action="/notes/attachment/delete" method="post" class="download-inline-form">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                                    <input type="hidden" name="note_id" value="{{ selected_note.note_id }}">
+                                                    <input type="hidden" name="attachment_id" value="{{ attachment.attachment_id }}">
+                                                    <input type="password" name="note_password" required autocomplete="current-password" placeholder="笔记密码" class="download-password-field">
+                                                    <button type="submit" class="btn-danger" onclick="return window.confirm('确认删除当前附件？');">删除附件</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </article>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </section>
+    </div>
+    {% endif %}
+{% endblock %}

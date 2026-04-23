@@ -10,7 +10,13 @@ class SessionStore:
         self._sessions = {}
         self._lock = threading.RLock()
 
-    def create(self, user: str, client_ip: str | None = None, user_agent: str | None = None) -> tuple[str, dict]:
+    def create(
+        self,
+        user: str,
+        client_ip: str | None = None,
+        user_agent: str | None = None,
+        mode: str = "vault",
+    ) -> tuple[str, dict]:
         now = int(time.time())
         session_id = secrets.token_urlsafe(32)
         
@@ -22,6 +28,7 @@ class SessionStore:
         
         session = {
             "user": user,
+            "mode": mode,
             "csrf_token": secrets.token_urlsafe(24),
             "created_at": now,
             "expires_at": now + self.ttl_seconds,

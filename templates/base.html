@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AEGIS VAULT | 宙斯盾保险库{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-size='48'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
+        :root {
+            --neon-cyan: #00e7ff;
+            --neon-red: #ff335f;
+            --bg-dark: #02060d;
+            --panel-bg: rgba(8, 14, 26, 0.76);
+            --panel-border: rgba(0, 231, 255, 0.32);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            color: var(--neon-cyan);
+            font-family: 'Noto Sans SC', sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(0, 231, 255, 0.14), transparent 34%),
+                radial-gradient(circle at bottom right, rgba(255, 51, 95, 0.12), transparent 28%),
+                linear-gradient(180deg, #07101e 0%, var(--bg-dark) 58%, #010308 100%);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .shell {
+            width: min(1180px, calc(100vw - 1.5rem));
+            margin: 0 auto;
+            padding: 1rem 0 2rem;
+        }
+
+        .auth-body {
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .auth-shell {
+            height: 100vh;
+            padding: 0.75rem 0;
+        }
+
+        .auth-frame {
+            height: calc(100vh - 1.5rem);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset, 0 16px 60px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+
+        .neon-border {
+            box-shadow: 0 0 18px rgba(0, 231, 255, 0.14), inset 0 0 12px rgba(0, 231, 255, 0.05);
+        }
+
+        .danger-border {
+            border-color: rgba(255, 51, 95, 0.45);
+            box-shadow: 0 0 22px rgba(255, 51, 95, 0.2), inset 0 0 14px rgba(255, 51, 95, 0.08);
+        }
+
+        .panel-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 1rem;
+        }
+
+        .auth-layout {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            gap: 1rem;
+        }
+
+        .sidebar-panel,
+        .content-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .sidebar-scroll,
+        .content-scroll {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 231, 255, 0.28) transparent;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar,
+        .content-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar-thumb,
+        .content-scroll::-webkit-scrollbar-thumb {
+            background: rgba(0, 231, 255, 0.22);
+            border-radius: 999px;
+        }
+
+        .field,
+        .select-field,
+        .file-field,
+        .textarea-field {
+            width: 100%;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(0, 231, 255, 0.26);
+            background: rgba(0, 231, 255, 0.05);
+            color: var(--neon-cyan);
+            padding: 0.9rem 1rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        }
+
+        .field,
+        .select-field,
+        .file-field {
+            min-height: 48px;
+        }
+
+        .textarea-field {
+            min-height: 340px;
+            resize: vertical;
+            line-height: 1.7;
+        }
+
+        .field:focus,
+        .select-field:focus,
+        .file-field:focus,
+        .textarea-field:focus,
+        .download-password-field:focus {
+            border-color: rgba(0, 231, 255, 0.7);
+            box-shadow: 0 0 0 3px rgba(0, 231, 255, 0.14);
+        }
+
+        .select-field option {
+            background: #08111f;
+            color: #dffcff;
+        }
+
+        .file-field {
+            padding: 0.55rem 0.75rem;
+        }
+
+        .file-field::file-selector-button {
+            border: 0;
+            border-radius: 0.75rem;
+            background: rgba(0, 231, 255, 0.14);
+            color: var(--neon-cyan);
+            padding: 0.75rem 0.95rem;
+            margin-right: 0.85rem;
+            cursor: pointer;
+        }
+
+        .btn-neon,
+        .btn-danger,
+        .btn-muted,
+        .btn-ghost {
+            min-height: 48px;
+            border-radius: 0.95rem;
+            padding: 0.85rem 1rem;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-neon {
+            background: rgba(0, 231, 255, 0.11);
+            border-color: rgba(0, 231, 255, 0.6);
+            color: var(--neon-cyan);
+        }
+
+        .btn-neon:hover,
+        .btn-danger:hover,
+        .btn-muted:hover,
+        .btn-ghost:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-neon:hover {
+            background: rgba(0, 231, 255, 0.2);
+            box-shadow: 0 10px 24px rgba(0, 231, 255, 0.14);
+        }
+
+        .btn-danger {
+            background: rgba(255, 51, 95, 0.12);
+            border-color: rgba(255, 51, 95, 0.55);
+            color: #ff8aa2;
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 51, 95, 0.18);
+            box-shadow: 0 10px 24px rgba(255, 51, 95, 0.14);
+        }
+
+        .btn-muted {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(0, 231, 255, 0.14);
+            color: #9bc9ce;
+        }
+
+        .btn-muted:hover,
+        .btn-ghost:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .btn-ghost {
+            background: rgba(255, 255, 255, 0.02);
+            border-color: rgba(0, 231, 255, 0.18);
+            color: #9be8ef;
+        }
+
+        .metric,
+        .info-card,
+        .note-card,
+        .attachment-card,
+        .log-card {
+            border-radius: 1rem;
+            border: 1px solid rgba(0, 231, 255, 0.16);
+            background: linear-gradient(180deg, rgba(0, 231, 255, 0.06), rgba(0, 231, 255, 0.02));
+            padding: 1rem;
+        }
+
+        .countdown {
+            font-size: clamp(1.65rem, 6vw, 4.9rem);
+            line-height: 1;
+            letter-spacing: 0.03em;
+            word-break: keep-all;
+            white-space: nowrap;
+        }
+
+        .section-title {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            color: rgba(138, 224, 233, 0.76);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            border-radius: 999px;
+            padding: 0.45rem 0.75rem;
+            border: 1px solid rgba(0, 231, 255, 0.16);
+            background: rgba(0, 231, 255, 0.06);
+            font-size: 0.78rem;
+        }
+
+        .idle-pill {
+            min-width: 84px;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            color: #9ff7ff;
+        }
+
+        .idle-pill.is-warning {
+            border-color: rgba(255, 51, 95, 0.45);
+            background: rgba(255, 51, 95, 0.12);
+            color: #ff94ab;
+        }
+
+        .nav-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.6rem;
+        }
+
+        .nav-link {
+            min-height: 44px;
+            border-radius: 0.85rem;
+            border: 1px solid rgba(0, 231, 255, 0.16);
+            background: rgba(255, 255, 255, 0.02);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #9be8ef;
+            text-decoration: none;
+            font-size: 0.84rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .nav-link.active {
+            border-color: rgba(0, 231, 255, 0.56);
+            background: rgba(0, 231, 255, 0.12);
+            color: var(--neon-cyan);
+            box-shadow: inset 0 0 14px rgba(0, 231, 255, 0.08);
+        }
+
+        .admin-dropdown {
+            border-radius: 1rem;
+            border: 1px solid rgba(0, 231, 255, 0.18);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .admin-dropdown summary {
+            list-style: none;
+        }
+
+        .admin-dropdown summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .admin-toggle {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1rem 0.95rem;
+            background: transparent;
+            border: 0;
+            color: inherit;
+            cursor: pointer;
+        }
+
+        .admin-toggle-icon {
+            transition: transform 0.2s ease;
+        }
+
+        .admin-dropdown[open] .admin-toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .admin-content {
+            border-top: 1px solid rgba(0, 231, 255, 0.12);
+            padding: 1rem;
+        }
+
+        .file-card,
+        .note-menu-card {
+            border-radius: 1rem;
+            border: 1px solid rgba(0, 231, 255, 0.12);
+            background: rgba(0, 231, 255, 0.04);
+            padding: 0.95rem;
+        }
+
+        .note-menu-card.is-active {
+            border-color: rgba(0, 231, 255, 0.5);
+            box-shadow: inset 0 0 0 1px rgba(0, 231, 255, 0.12);
+            background: rgba(0, 231, 255, 0.09);
+        }
+
+        .file-name-text,
+        .note-title-text {
+            display: block;
+            max-width: 100%;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .download-form,
+        .stack-form,
+        .dense-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .download-inline-form,
+        .inline-actions,
+        .attachment-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .download-password-field {
+            min-height: 42px;
+            width: min(220px, 100%);
+            border-radius: 0.8rem;
+            border: 1px solid rgba(0, 231, 255, 0.26);
+            background: rgba(0, 231, 255, 0.05);
+            color: var(--neon-cyan);
+            padding: 0.75rem 0.9rem;
+            outline: none;
+        }
+
+        .mobile-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .desktop-table {
+            display: none;
+        }
+
+        .files-table,
+        .log-table {
+            table-layout: fixed;
+        }
+
+        .file-name-cell {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .notes-shell {
+            display: grid;
+            grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+            gap: 1rem;
+            min-height: 0;
+            flex: 1;
+        }
+
+        .note-list-panel,
+        .note-editor-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .history-list {
+            max-height: 170px;
+            overflow-y: auto;
+            margin: 0;
+            padding-left: 1.1rem;
+            color: rgba(224, 252, 255, 0.8);
+            font-size: 0.86rem;
+            line-height: 1.7;
+        }
+
+        .attachment-grid {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .empty-state {
+            border-radius: 1rem;
+            border: 1px dashed rgba(0, 231, 255, 0.18);
+            padding: 1.2rem;
+            text-align: center;
+            color: rgba(224, 252, 255, 0.62);
+        }
+
+        .code-blockish {
+            border-radius: 0.9rem;
+            border: 1px solid rgba(0, 231, 255, 0.14);
+            background: rgba(1, 10, 18, 0.74);
+            color: rgba(220, 252, 255, 0.82);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            padding: 0.85rem 0.95rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .footer-meta {
+            margin-top: 1rem;
+            text-align: center;
+            font-size: 0.78rem;
+            line-height: 1.8;
+            color: rgba(181, 241, 247, 0.72);
+        }
+
+        .footer-meta a {
+            color: var(--neon-cyan);
+            text-decoration: none;
+            border-bottom: 1px solid rgba(0, 231, 255, 0.26);
+        }
+
+        .footer-meta a:hover {
+            border-bottom-color: rgba(0, 231, 255, 0.8);
+        }
+
+        .danger-mode {
+            background:
+                radial-gradient(circle at top, rgba(255, 51, 95, 0.14), transparent 30%),
+                linear-gradient(180deg, #14070d 0%, #050203 60%, #020103 100%);
+        }
+
+        @media (min-width: 768px) {
+            .panel-grid {
+                grid-template-columns: repeat(12, minmax(0, 1fr));
+            }
+
+            .desktop-table {
+                display: table;
+            }
+
+            .mobile-stack {
+                display: none;
+            }
+
+            .auth-layout {
+                grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+            }
+        }
+
+        @media (max-width: 767px) {
+            .auth-body {
+                height: auto;
+                overflow: auto;
+            }
+
+            .auth-shell {
+                height: auto;
+                padding: 1rem 0 2rem;
+            }
+
+            .auth-frame {
+                height: auto;
+                display: block;
+                overflow: visible;
+            }
+
+            .shell {
+                width: min(100vw - 0.85rem, 100%);
+            }
+
+            .sidebar-panel,
+            .content-panel,
+            .note-list-panel,
+            .note-editor-panel,
+            .sidebar-scroll,
+            .content-scroll {
+                display: block;
+                overflow: visible;
+            }
+
+            .download-inline-form,
+            .inline-actions,
+            .attachment-actions,
+            .nav-grid {
+                grid-template-columns: 1fr;
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .download-password-field {
+                width: 100%;
+            }
+
+            .countdown {
+                font-size: clamp(1.4rem, 10vw, 3.1rem);
+                letter-spacing: 0.015em;
+            }
+
+            .notes-shell {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="{% if duress_active %}danger-mode{% endif %}{% if auth %} auth-body{% endif %}">
+    <main class="shell{% if auth %} auth-shell{% endif %}">
+        <section class="panel neon-border rounded-[1.4rem] px-4 py-5 md:px-7 md:py-7{% if auth %} auth-frame{% endif %}">
+            <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
+                <div class="space-y-2">
+                    <p class="section-title">Blackbox Protocol</p>
+                    <h1 class="orbitron text-2xl font-bold tracking-[0.28em] text-cyan-300 md:text-4xl">AEGIS VAULT</h1>
+                    <p class="max-w-2xl text-sm leading-6 text-cyan-100/70 md:text-base">{% block subtitle %}自托管加密保险库，开源 可控 便捷的选择{% endblock %}</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    {% if destroyed %}
+                    <span class="status-pill border-red-500/30 bg-red-500/10 text-red-300">● 系统已自毁</span>
+                    {% elif exists %}
+                    <span class="status-pill text-emerald-300">● 隧道运行中</span>
+                    {% else %}
+                    <span class="status-pill border-yellow-500/30 bg-yellow-500/10 text-yellow-200">● 待初始化</span>
+                    {% endif %}
+                    {% if auth %}
+                    <span id="idle-countdown" class="status-pill idle-pill">60s</span>
+                    <span class="status-pill">{{ "admin" if auth.user == "admin" else "USER" }}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% block page_content %}{% endblock %}
+        </section>
+    </main>
+
+    <footer class="footer-meta">
+        <div>&copy; Aegis Vault. Licensed under the Apache License 2.0</div>
+        <div>GitHub:
+            <a href="https://github.com/keaidang/aegis-vault" target="_blank" rel="noopener noreferrer">keaidang</a> 邮箱: <a href="mailto:k@9o.pw">k@9o.pw</a></div>
+    </footer>
+
+    <script>
+        const remStart = {{ (remaining_total_s or 0)|int }};
+        const duressActive = {{ duress_active|tojson }};
+        const countdownEl = document.getElementById('countdown');
+        const idleCountdownEl = document.getElementById('idle-countdown');
+        const logoutForm = document.getElementById('logout-form');
+        const pageForms = Array.from(document.querySelectorAll('form'));
+        let remaining = remStart;
+        let idleRemaining = 60;
+        let idleTimerId = null;
+        let idleSubmitting = false;
+        let suppressReloadLock = false;
+
+        function renderCountdown(value) {
+            if (!countdownEl) return;
+            const safeValue = Math.max(0, value);
+            const hours = Math.floor(safeValue / 3600);
+            const minutes = Math.floor((safeValue % 3600) / 60);
+            const seconds = safeValue % 60;
+            countdownEl.textContent = [hours, minutes, seconds].map((item) => String(item).padStart(2, '0')).join(':');
+        }
+
+        if (countdownEl) {
+            renderCountdown(remaining);
+        }
+
+        if (countdownEl && remaining > 0) {
+            window.setInterval(() => {
+                if (!duressActive && remaining > 0) {
+                    remaining -= 1;
+                }
+                renderCountdown(remaining);
+            }, 1000);
+        }
+
+        function renderIdleCountdown(value) {
+            if (!idleCountdownEl) return;
+            const safeValue = Math.max(0, value);
+            idleCountdownEl.textContent = `${String(safeValue).padStart(2, '0')}s`;
+            idleCountdownEl.classList.toggle('is-warning', safeValue <= 10);
+        }
+
+        function submitIdleLogout() {
+            if (!logoutForm || idleSubmitting) return;
+            idleSubmitting = true;
+            logoutForm.submit();
+        }
+
+        function resetIdleCountdown() {
+            if (!idleCountdownEl || idleSubmitting) return;
+            idleRemaining = 60;
+            renderIdleCountdown(idleRemaining);
+        }
+
+        if (idleCountdownEl && logoutForm) {
+            renderIdleCountdown(idleRemaining);
+            idleTimerId = window.setInterval(() => {
+                idleRemaining -= 1;
+                renderIdleCountdown(idleRemaining);
+                if (idleRemaining <= 0) {
+                    window.clearInterval(idleTimerId);
+                    submitIdleLogout();
+                }
+            }, 1000);
+
+            ['pointerdown', 'pointermove', 'keydown', 'scroll', 'touchstart', 'click'].forEach((eventName) => {
+                window.addEventListener(eventName, resetIdleCountdown, { passive: true });
+            });
+        }
+
+        if (logoutForm) {
+            pageForms.forEach((formEl) => {
+                if (formEl === logoutForm) return;
+                formEl.addEventListener('submit', () => {
+                    suppressReloadLock = true;
+                });
+            });
+
+            window.addEventListener('keydown', (event) => {
+                const key = String(event.key || '').toLowerCase();
+                const refreshByShortcut = key === 'f5' || (key === 'r' && (event.ctrlKey || event.metaKey));
+                if (!refreshByShortcut) return;
+                event.preventDefault();
+                submitIdleLogout();
+            });
+
+            const navEntry = performance.getEntriesByType('navigation')[0];
+            const isReloadNavigation = navEntry && navEntry.type === 'reload';
+            if (isReloadNavigation && !suppressReloadLock) {
+                window.setTimeout(() => submitIdleLogout(), 10);
+            }
+        }
+
+        {% if msg %}
+        window.setTimeout(() => alert({{ msg|tojson }}), 50);
+        {% endif %}
+    </script>
+    {% block page_script %}{% endblock %}
+</body>
+</html>

@@ -1,808 +1,269 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AEGIS VAULT | 宙斯盾保险库</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-size='48'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
-
-        :root {
-            --neon-cyan: #00e7ff;
-            --neon-cyan-soft: rgba(0, 231, 255, 0.18);
-            --neon-red: #ff335f;
-            --bg-dark: #02060d;
-            --panel-bg: rgba(8, 14, 26, 0.76);
-            --panel-border: rgba(0, 231, 255, 0.32);
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            min-height: 100vh;
-            margin: 0;
-            color: var(--neon-cyan);
-            font-family: 'Noto Sans SC', sans-serif;
-            background:
-                radial-gradient(circle at top, rgba(0, 231, 255, 0.14), transparent 34%),
-                radial-gradient(circle at bottom right, rgba(255, 51, 95, 0.12), transparent 28%),
-                linear-gradient(180deg, #07101e 0%, var(--bg-dark) 58%, #010308 100%);
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-
-        .orbitron {
-            font-family: 'Orbitron', sans-serif;
-        }
-
-        .shell {
-            width: min(1120px, calc(100vw - 1.5rem));
-            margin: 0 auto;
-            padding: 1rem 0 2rem;
-        }
-
-        .auth-body {
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        .auth-shell {
-            height: 100vh;
-            padding: 0.75rem 0;
-        }
-
-        .auth-frame {
-            height: calc(100vh - 1.5rem);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .panel {
-            background: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset, 0 16px 60px rgba(0, 0, 0, 0.28);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-        }
-
-        .neon-border {
-            box-shadow: 0 0 18px rgba(0, 231, 255, 0.14), inset 0 0 12px rgba(0, 231, 255, 0.05);
-        }
-
-        .danger-border {
-            border-color: rgba(255, 51, 95, 0.45);
-            box-shadow: 0 0 22px rgba(255, 51, 95, 0.2), inset 0 0 14px rgba(255, 51, 95, 0.08);
-        }
-
-        .panel-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr);
-            gap: 1rem;
-        }
-
-        .field,
-        .select-field,
-        .file-field {
-            width: 100%;
-            min-height: 48px;
-            border-radius: 0.9rem;
-            border: 1px solid rgba(0, 231, 255, 0.26);
-            background: rgba(0, 231, 255, 0.05);
-            color: var(--neon-cyan);
-            padding: 0.9rem 1rem;
-            outline: none;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-        }
-
-        .field:focus,
-        .select-field:focus,
-        .file-field:focus {
-            border-color: rgba(0, 231, 255, 0.7);
-            box-shadow: 0 0 0 3px rgba(0, 231, 255, 0.14);
-        }
-
-        .select-field option {
-            background: #08111f;
-            color: #dffcff;
-        }
-
-        .file-field {
-            padding: 0.55rem 0.75rem;
-        }
-
-        .file-field::file-selector-button {
-            border: 0;
-            border-radius: 0.75rem;
-            background: rgba(0, 231, 255, 0.14);
-            color: var(--neon-cyan);
-            padding: 0.75rem 0.95rem;
-            margin-right: 0.85rem;
-            cursor: pointer;
-        }
-
-        .btn-neon,
-        .btn-danger,
-        .btn-muted {
-            min-height: 48px;
-            border-radius: 0.95rem;
-            padding: 0.85rem 1rem;
-            border: 1px solid transparent;
-            cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-
-        .btn-neon {
-            background: rgba(0, 231, 255, 0.11);
-            border-color: rgba(0, 231, 255, 0.6);
-            color: var(--neon-cyan);
-        }
-
-        .btn-neon:hover {
-            transform: translateY(-1px);
-            background: rgba(0, 231, 255, 0.2);
-            box-shadow: 0 10px 24px rgba(0, 231, 255, 0.14);
-        }
-
-        .btn-danger {
-            background: rgba(255, 51, 95, 0.12);
-            border-color: rgba(255, 51, 95, 0.55);
-            color: #ff8aa2;
-        }
-
-        .btn-danger:hover {
-            transform: translateY(-1px);
-            background: rgba(255, 51, 95, 0.18);
-            box-shadow: 0 10px 24px rgba(255, 51, 95, 0.14);
-        }
-
-        .btn-muted {
-            background: rgba(255, 255, 255, 0.03);
-            border-color: rgba(0, 231, 255, 0.14);
-            color: #9bc9ce;
-        }
-
-        .btn-muted:hover {
-            background: rgba(255, 255, 255, 0.06);
-        }
-
-        .metric {
-            border-radius: 1rem;
-            border: 1px solid rgba(0, 231, 255, 0.16);
-            background: linear-gradient(180deg, rgba(0, 231, 255, 0.06), rgba(0, 231, 255, 0.02));
-            padding: 1rem;
-        }
-
-        .countdown {
-            font-size: clamp(1.65rem, 6vw, 4.9rem);
-            line-height: 1;
-            letter-spacing: 0.03em;
-            word-break: keep-all;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: clip;
-            max-width: 100%;
-        }
-
-        .section-title {
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.22em;
-            color: rgba(138, 224, 233, 0.76);
-        }
-
-        .file-card {
-            border-radius: 1rem;
-            border: 1px solid rgba(0, 231, 255, 0.12);
-            background: rgba(0, 231, 255, 0.04);
-            padding: 0.95rem;
-        }
-
-        .file-name-text {
-            display: block;
-            max-width: 100%;
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .download-form {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .download-inline-form {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 0.75rem;
-        }
-
-        .download-password-field {
-            min-height: 42px;
-            width: min(220px, 100%);
-            border-radius: 0.8rem;
-            border: 1px solid rgba(0, 231, 255, 0.26);
-            background: rgba(0, 231, 255, 0.05);
-            color: var(--neon-cyan);
-            padding: 0.75rem 0.9rem;
-            outline: none;
-        }
-
-        .download-password-field:focus {
-            border-color: rgba(0, 231, 255, 0.7);
-            box-shadow: 0 0 0 3px rgba(0, 231, 255, 0.14);
-        }
-
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            border-radius: 999px;
-            padding: 0.45rem 0.75rem;
-            border: 1px solid rgba(0, 231, 255, 0.16);
-            background: rgba(0, 231, 255, 0.06);
-            font-size: 0.78rem;
-        }
-
-        .idle-pill {
-            min-width: 84px;
-            justify-content: center;
-            font-family: 'Orbitron', sans-serif;
-            color: #9ff7ff;
-        }
-
-        .idle-pill.is-warning {
-            border-color: rgba(255, 51, 95, 0.45);
-            background: rgba(255, 51, 95, 0.12);
-            color: #ff94ab;
-        }
-
-        .footer-meta {
-            margin-top: 1rem;
-            text-align: center;
-            font-size: 0.78rem;
-            line-height: 1.8;
-            color: rgba(181, 241, 247, 0.72);
-        }
-
-        .footer-meta a {
-            color: var(--neon-cyan);
-            text-decoration: none;
-            border-bottom: 1px solid rgba(0, 231, 255, 0.26);
-        }
-
-        .footer-meta a:hover {
-            border-bottom-color: rgba(0, 231, 255, 0.8);
-        }
-
-        .mobile-stack {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .desktop-table {
-            display: none;
-        }
-
-        .files-table {
-            table-layout: fixed;
-        }
-
-        .file-name-cell {
-            width: 100%;
-            min-width: 0;
-        }
-
-        .auth-layout {
-            flex: 1;
-            min-height: 0;
-        }
-
-        .sidebar-panel,
-        .files-panel {
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-            overflow: hidden;
-        }
-
-        .sidebar-scroll,
-        .files-scroll {
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
-            scrollbar-width: thin;
-            scrollbar-color: rgba(0, 231, 255, 0.28) transparent;
-        }
-
-        .sidebar-scroll::-webkit-scrollbar,
-        .files-scroll::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .sidebar-scroll::-webkit-scrollbar-thumb,
-        .files-scroll::-webkit-scrollbar-thumb {
-            background: rgba(0, 231, 255, 0.22);
-            border-radius: 999px;
-        }
-
-        .admin-dropdown {
-            border-radius: 1rem;
-            border: 1px solid rgba(0, 231, 255, 0.18);
-            background: rgba(255, 255, 255, 0.02);
-        }
-
-        .admin-dropdown summary {
-            list-style: none;
-        }
-
-        .admin-dropdown summary::-webkit-details-marker {
-            display: none;
-        }
-
-        .admin-toggle {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: 1rem 1rem 0.95rem;
-            background: transparent;
-            border: 0;
-            color: inherit;
-            cursor: pointer;
-        }
-
-        .admin-toggle-icon {
-            transition: transform 0.2s ease;
-        }
-
-        .admin-dropdown[open] .admin-toggle-icon {
-            transform: rotate(180deg);
-        }
-
-        .admin-content {
-            border-top: 1px solid rgba(0, 231, 255, 0.12);
-            padding: 1rem;
-        }
-
-        .danger-mode {
-            background:
-                radial-gradient(circle at top, rgba(255, 51, 95, 0.14), transparent 30%),
-                linear-gradient(180deg, #14070d 0%, #050203 60%, #020103 100%);
-        }
-
-        @media (min-width: 768px) {
-            .shell {
-                width: min(1180px, calc(100vw - 2.5rem));
-                padding-top: 1.75rem;
-            }
-
-            .panel-grid {
-                grid-template-columns: repeat(12, minmax(0, 1fr));
-            }
-
-            .desktop-table {
-                display: table;
-            }
-
-            .mobile-stack {
-                display: none;
-            }
-
-            .auth-layout {
-                grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-            }
-        }
-
-        @media (max-width: 767px) {
-            .auth-body {
-                height: auto;
-                overflow: auto;
-            }
-
-            .auth-shell {
-                height: auto;
-                padding: 1rem 0 2rem;
-            }
-
-            .auth-frame {
-                height: auto;
-                display: block;
-                overflow: visible;
-            }
-
-            .shell {
-                width: min(100vw - 0.85rem, 100%);
-            }
-
-            .panel-grid {
-                gap: 0.85rem;
-            }
-
-            .sidebar-panel,
-            .files-panel,
-            .sidebar-scroll,
-            .files-scroll {
-                display: block;
-                overflow: visible;
-            }
-
-            .compact-text {
-                font-size: 0.78rem;
-            }
-
-            .countdown {
-                font-size: clamp(1.4rem, 10vw, 3.1rem);
-                letter-spacing: 0.015em;
-            }
-
-            .download-inline-form {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .download-password-field {
-                width: 100%;
-            }
-        }
-    </style>
-</head>
-<body class="{% if duress_active %}danger-mode{% endif %}{% if auth %} auth-body{% endif %}">
-    <main class="shell{% if auth %} auth-shell{% endif %}">
-        <section class="panel neon-border rounded-[1.4rem] px-4 py-5 md:px-7 md:py-7{% if auth %} auth-frame{% endif %}">
-            <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
-                <div class="space-y-2">
-                    <p class="section-title">Blackbox Protocol</p>
-                    <h1 class="orbitron text-2xl font-bold tracking-[0.28em] text-cyan-300 md:text-4xl">AEGIS VAULT</h1>
-                    <p class="max-w-2xl text-sm leading-6 text-cyan-100/70 md:text-base">自托管加密保险库，开源 可控 便捷的选择</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    {% if destroyed %}
-                    <span class="status-pill border-red-500/30 bg-red-500/10 text-red-300">● 系统已自毁</span>
-                    {% elif exists %}
-                    <span class="status-pill text-emerald-300">● 隧道运行中</span>
-                    {% else %}
-                    <span class="status-pill border-yellow-500/30 bg-yellow-500/10 text-yellow-200">● 待初始化</span>
-                    {% endif %}
-                    {% if auth %}
-                    <span id="idle-countdown" class="status-pill idle-pill">60s</span>
-                    <span class="status-pill">{{ "admin" if auth.user == "admin" else "USER" }}</span>
-                    {% endif %}
-                </div>
+{% extends "base.html" %}
+
+{% block page_content %}
+    {% if not exists and not destroyed %}
+    <div class="mx-auto mt-6 max-w-2xl">
+        <div class="panel neon-border rounded-[1.25rem] px-5 py-6 md:px-7 md:py-8">
+            <div class="mb-6 space-y-2 text-center">
+                <p class="section-title">Initialize</p>
+                <h2 class="orbitron text-xl text-cyan-300 md:text-2xl">建立最高加密协议</h2>
+                <p class="text-sm text-cyan-100/65">首次部署后创建管理员密钥和签到协议。</p>
             </div>
-
-            {% if not exists and not destroyed %}
-            <div class="mx-auto mt-6 max-w-2xl">
-                <div class="panel neon-border rounded-[1.25rem] px-5 py-6 md:px-7 md:py-8">
-                    <div class="mb-6 space-y-2 text-center">
-                        <p class="section-title">Initialize</p>
-                        <h2 class="orbitron text-xl text-cyan-300 md:text-2xl">建立最高加密协议</h2>
-                        <p class="text-sm text-cyan-100/65">首次部署后创建管理员密钥和签到协议。</p>
-                    </div>
-                    <form action="/setup" method="post" class="space-y-4">
-                        <input type="password" name="master_password" required minlength="10" autocomplete="new-password" placeholder="设置管理员总密码" class="field">
-                        <input type="password" name="confirm_master_password" required minlength="10" autocomplete="new-password" placeholder="再次输入管理员总密码" class="field">
-                        <input type="password" name="checkin_code" required minlength="6" autocomplete="new-password" placeholder="设置签到确认码" class="field">
-                        <button type="submit" class="btn-neon orbitron w-full">生成 RSA-4096 密钥对</button>
-                    </form>
+            <form action="/setup" method="post" class="stack-form">
+                <input type="password" name="master_password" required minlength="10" autocomplete="new-password" placeholder="设置管理员总密码" class="field">
+                <input type="password" name="confirm_master_password" required minlength="10" autocomplete="new-password" placeholder="再次输入管理员总密码" class="field">
+                <input type="password" name="checkin_code" required minlength="6" autocomplete="new-password" placeholder="设置签到确认码" class="field">
+                <button type="submit" class="btn-neon orbitron w-full">生成 RSA-4096 密钥对</button>
+            </form>
+        </div>
+    </div>
+    {% elif destroyed %}
+    <div class="mx-auto mt-6 max-w-2xl">
+        <div class="panel danger-border rounded-[1.25rem] px-5 py-7 text-center md:px-8 md:py-10">
+            <div class="space-y-3">
+                <p class="section-title text-red-300/80">Failsafe</p>
+                <h2 class="orbitron text-2xl text-red-300 md:text-3xl">系统已永久锁定</h2>
+                <p class="mx-auto max-w-xl text-sm leading-7 text-red-100/70 md:text-base">私钥和加密数据已执行销毁流程。你可以重置系统重新初始化，但无法恢复已销毁内容。</p>
+            </div>
+            <form action="/reset" method="post" class="mt-8">
+                <button type="submit" class="btn-neon orbitron w-full md:w-auto md:px-8">重新初始化系统</button>
+            </form>
+        </div>
+    </div>
+    {% elif not auth %}
+    <div class="mt-6 panel-grid">
+        <section class="panel neon-border rounded-[1.25rem] p-5 md:col-span-6 md:p-7">
+            <div class="space-y-4">
+                <div>
+                    <p class="section-title">Dead Man's Switch</p>
+                    <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">自毁倒计时</h2>
                 </div>
-            </div>
-            {% elif destroyed %}
-            <div class="mx-auto mt-6 max-w-2xl">
-                <div class="panel danger-border rounded-[1.25rem] px-5 py-7 text-center md:px-8 md:py-10">
-                    <div class="space-y-3">
-                        <p class="section-title text-red-300/80">Failsafe</p>
-                        <h2 class="orbitron text-2xl text-red-300 md:text-3xl">系统已永久锁定</h2>
-                        <p class="mx-auto max-w-xl text-sm leading-7 text-red-100/70 md:text-base">私钥和加密数据已执行销毁流程。你可以重置系统重新初始化，但无法恢复已销毁内容。</p>
-                    </div>
-                    <form action="/reset" method="post" class="mt-8">
-                        <button type="submit" class="btn-neon orbitron w-full md:w-auto md:px-8">重新初始化系统</button>
-                    </form>
+                <div class="metric">
+                    <div id="countdown" class="countdown orbitron text-cyan-300">00:00:00</div>
+                    <p class="mt-3 text-sm leading-6 text-cyan-100/60">输入正确签到码后会立即重置计时器。</p>
                 </div>
+                <form action="/checkin" method="post" class="stack-form">
+                    <input type="password" name="checkin_code" required autocomplete="current-password" placeholder="输入签到码重置计时器" class="field">
+                    <button type="submit" class="btn-neon orbitron w-full">重置协议计时器</button>
+                </form>
             </div>
-            {% elif not auth %}
-            <div class="mt-6 panel-grid">
-                <section class="panel neon-border rounded-[1.25rem] p-5 md:col-span-6 md:p-7">
-                    <div class="space-y-4">
-                        <div>
-                            <p class="section-title">Dead Man's Switch</p>
-                            <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">自毁倒计时</h2>
-                        </div>
-                        <div class="metric">
-                            <div id="countdown" class="countdown orbitron text-cyan-300">00:00:00</div>
-                            <p class="mt-3 text-sm leading-6 text-cyan-100/60">输入正确签到码后会立即重置计时器。</p>
-                        </div>
-                        <form action="/checkin" method="post" class="space-y-4">
-                            <input type="password" name="checkin_code" required autocomplete="current-password" placeholder="输入签到码重置计时器" class="field">
-                            <button type="submit" class="btn-neon orbitron w-full">重置协议计时器</button>
-                        </form>
-                    </div>
-                </section>
+        </section>
 
-                <section class="panel neon-border rounded-[1.25rem] p-5 md:col-span-6 md:p-7">
-                    <div class="space-y-4">
-                        <div>
-                            <p class="section-title">Authentication</p>
-                            <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">进入数字保险库</h2>
-                        </div>
-                        <div class="metric">
-                            <div class="orbitron text-2xl text-cyan-700 md:text-3xl">ENCRYPTION ACTIVE</div>
-                            <p class="mt-3 text-sm leading-6 text-cyan-100/60">登录后使用安全会话访问上传、下载和系统管理操作。</p>
-                        </div>
-                        <form action="/login" method="post" class="space-y-4">
-                            <input type="password" name="password" required autocomplete="current-password" placeholder="输入访问密码" class="field">
-                            <button type="submit" class="btn-neon orbitron w-full">进入保险库</button>
-                        </form>
-                    </div>
-                </section>
+        <section class="panel neon-border rounded-[1.25rem] p-5 md:col-span-6 md:p-7">
+            <div class="space-y-4">
+                <div>
+                    <p class="section-title">Authentication</p>
+                    <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">进入数字保险库</h2>
+                </div>
+                <div class="metric">
+                    <div class="orbitron text-2xl text-cyan-700 md:text-3xl">ENCRYPTION ACTIVE</div>
+                    <p class="mt-3 text-sm leading-6 text-cyan-100/60">登录后使用安全会话访问上传、下载、删除和系统管理操作。</p>
+                </div>
+                <form action="/login" method="post" class="stack-form">
+                    <input type="password" name="password" required autocomplete="current-password" placeholder="输入访问密码" class="field">
+                    <button type="submit" class="btn-neon orbitron w-full">进入保险库</button>
+                </form>
             </div>
-            {% else %}
-            <div class="mt-6 panel-grid auth-layout">
-                <aside class="panel neon-border rounded-[1.25rem] p-5 md:p-6 sidebar-panel">
-                    <div class="space-y-5 sidebar-scroll">
-                        <div class="metric">
-                            <p class="section-title">Session</p>
-                            <div class="mt-2 orbitron text-xl text-cyan-300 md:text-2xl">{{ "ADMIN" if auth.user == "admin" else "USER" }}</div>
-                            <p class="mt-3 text-sm leading-6 text-cyan-100/65">
-                                当前通过服务端会话访问，敏感口令不再下发到前端。
-                                {% if auth.is_admin and vault_size_mb is not none %}
-                                <br>系统容量: {{ vault_size_mb }} / {{ max_vault_mb }} MB
-                                {% endif %}
-                            </p>
-                        </div>
+        </section>
 
-                        <form id="logout-form" action="/logout" method="post">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                            <button type="submit" class="btn-muted orbitron w-full">断开会话</button>
-                        </form>
-
-                        {% if auth.is_admin %}
-                        <details class="admin-dropdown" id="admin-controls">
-                            <summary class="admin-toggle">
-                                <div class="text-left">
-                                    <p class="section-title">Admin Controls</p>
-                                    <h3 class="mt-2 text-base font-semibold text-cyan-200">系统管理协议</h3>
-                                </div>
-                                <span class="admin-toggle-icon text-xl text-cyan-300">⌄</span>
-                            </summary>
-                            <div class="admin-content space-y-4">
-                                <form action="/manage_user" method="post" class="space-y-3">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <select name="target_user" class="select-field" required>
-                                        {% for user in available_users %}
-                                        <option value="{{ user }}">{{ "管理员" if user == "admin" else user }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <input type="password" name="target_pass" required minlength="10" autocomplete="new-password" placeholder="设置访问密码" class="field">
-                                    <input type="password" name="confirm_target_pass" required minlength="10" autocomplete="new-password" placeholder="再次输入访问密码" class="field">
-                                    <button type="submit" class="btn-neon w-full">更新用户密钥</button>
-                                </form>
-
-                                <form action="/update_checkin_code" method="post" class="space-y-3">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <input type="password" name="new_code" required minlength="6" autocomplete="new-password" placeholder="修改签到确认码" class="field">
-                                    <button type="submit" class="btn-neon w-full">更新签到协议</button>
-                                </form>
-
-                                <form action="/update_duress_code" method="post" class="space-y-3">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <input type="password" name="duress_code" required minlength="6" autocomplete="new-password" placeholder="设置胁迫销毁码" class="field">
-                                    <button type="submit" class="btn-danger w-full">更新胁迫协议</button>
-                                </form>
-
-                                <form action="/reset" method="post" class="space-y-3">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <button type="submit" class="btn-muted w-full" onclick="return window.confirm('确认重置系统？这会清空当前密钥和保险库内容。');">重置系统</button>
-                                </form>
-                            </div>
-                        </details>
+        <section class="panel neon-border rounded-[1.25rem] p-5 md:col-span-12 md:p-7">
+            <div class="space-y-4">
+                <div>
+                    <p class="section-title">Shield Notes</p>
+                    <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">进入神盾笔记</h2>
+                </div>
+                <div class="metric">
+                    <div class="orbitron text-2xl text-cyan-700 md:text-3xl">NOTE CHANNEL</div>
+                    <p class="mt-3 text-sm leading-6 text-cyan-100/60">笔记密码与保险库密码完全分离。输入笔记密码只会进入笔记功能，不会进入保险库。</p>
+                </div>
+                <form action="/notes/login" method="post" class="stack-form md:max-w-xl">
+                    <input type="password" name="password" required autocomplete="current-password" placeholder="输入笔记密码" class="field">
+                    <button type="submit" class="btn-neon orbitron w-full">进入神盾笔记</button>
+                </form>
+            </div>
+        </section>
+    </div>
+    {% else %}
+    <div class="mt-6 auth-layout">
+        <aside class="panel neon-border rounded-[1.25rem] p-5 md:p-6 sidebar-panel">
+            <div class="space-y-5 sidebar-scroll">
+                <div class="metric">
+                    <p class="section-title">Session</p>
+                    <div class="mt-2 orbitron text-xl text-cyan-300 md:text-2xl">{{ "ADMIN" if auth.user == "admin" else "USER" }}</div>
+                    <p class="mt-3 text-sm leading-6 text-cyan-100/65">
+                        当前通过服务端会话访问。
+                        {% if auth.is_admin and vault_size_mb is not none %}
+                        <br>系统容量: {{ vault_size_mb }} / {{ max_vault_mb }} MB
                         {% endif %}
-                    </div>
-                </aside>
+                    </p>
+                </div>
 
-                <section class="panel neon-border rounded-[1.25rem] p-5 md:p-6 files-panel">
-                    <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
-                        <div>
-                            <p class="section-title">Vault Files</p>
-                            <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">加密文件</h2>
-                        </div>
-                        <div class="text-sm leading-6 text-cyan-100/55">单文件上限 {{ max_upload_mb }}MB，每次下载都需要重新输入访问密码，服务器返回后会清理临时明文文件。</div>
-                    </div>
+                {% if auth.is_admin %}
+                <div class="nav-grid">
+                    <a href="/" class="nav-link active">保险库</a>
+                    <a href="/logs" class="nav-link">日志</a>
+                    <span class="nav-link" style="opacity: 0.45;">独立模式</span>
+                </div>
+                {% endif %}
 
-                    <div class="mt-5 files-scroll">
-                        {% if not files %}
-                        <div class="rounded-[1rem] border border-dashed border-cyan-900/80 px-4 py-10 text-center">
-                            <p class="orbitron text-lg text-cyan-700">VAULT EMPTY</p>
-                            <p class="mt-2 text-sm text-cyan-100/50">当前保险库中还没有文件。</p>
+                <form id="logout-form" action="/logout" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn-muted orbitron w-full">断开会话</button>
+                </form>
+
+                {% if auth.is_admin %}
+                <details class="admin-dropdown" id="admin-controls">
+                    <summary class="admin-toggle">
+                        <div class="text-left">
+                            <p class="section-title">Admin Controls</p>
+                            <h3 class="mt-2 text-base font-semibold text-cyan-200">系统管理协议</h3>
                         </div>
-                        {% else %}
-                        <div class="mobile-stack">
-                            {% for file in files %}
-                            <article class="file-card">
-                                <div class="space-y-3">
-                                    <div>
-                                        <p class="section-title">Encrypted File</p>
-                                        <div class="mt-2 text-sm font-medium text-cyan-100">
-                                            <span class="file-name-text" title="{{ file }}">{{ file }}</span>
-                                        </div>
-                                    </div>
-                                    <form action="/download" method="post" class="download-form">
+                        <span class="admin-toggle-icon text-xl text-cyan-300">⌄</span>
+                    </summary>
+                    <div class="admin-content space-y-4">
+                        <form action="/manage_user" method="post" class="dense-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <select name="target_user" class="select-field" required>
+                                {% for user in available_users %}
+                                <option value="{{ user }}">{{ "管理员" if user == "admin" else user }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="password" name="target_pass" required minlength="10" autocomplete="new-password" placeholder="设置访问密码" class="field">
+                            <input type="password" name="confirm_target_pass" required minlength="10" autocomplete="new-password" placeholder="再次输入访问密码" class="field">
+                            <button type="submit" class="btn-neon w-full">更新用户密钥</button>
+                        </form>
+
+                        <form action="/manage_notes_feature" method="post" class="dense-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <select name="target_user" class="select-field" required>
+                                {% for user in available_users %}
+                                <option value="{{ user }}">{{ user }} {% if note_enabled_map.get(user) %}(已启用){% else %}(未启用){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            <label class="info-card flex items-center gap-3 text-sm text-cyan-100/80">
+                                <input type="checkbox" name="enabled" value="on">
+                                <span>启用神盾笔记</span>
+                            </label>
+                            <input type="password" name="note_password" autocomplete="new-password" placeholder="设置笔记独立密码" class="field">
+                            <input type="password" name="confirm_note_password" autocomplete="new-password" placeholder="再次输入笔记密码" class="field">
+                            <button type="submit" class="btn-neon w-full">更新笔记功能</button>
+                        </form>
+
+                        <form action="/update_checkin_code" method="post" class="dense-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="password" name="new_code" required minlength="6" autocomplete="new-password" placeholder="修改签到确认码" class="field">
+                            <button type="submit" class="btn-neon w-full">更新签到协议</button>
+                        </form>
+
+                        <form action="/update_duress_code" method="post" class="dense-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="password" name="duress_code" required minlength="6" autocomplete="new-password" placeholder="设置胁迫销毁码" class="field">
+                            <button type="submit" class="btn-danger w-full">更新胁迫协议</button>
+                        </form>
+
+                        <a href="/logs" class="btn-ghost w-full">查看日志</a>
+
+                        <form action="/reset" method="post" class="dense-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn-muted w-full" onclick="return window.confirm('确认重置系统？这会清空当前密钥和保险库内容。');">重置系统</button>
+                        </form>
+                    </div>
+                </details>
+                {% endif %}
+            </div>
+        </aside>
+
+        <section class="panel neon-border rounded-[1.25rem] p-5 md:p-6 content-panel">
+            <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
+                <div>
+                    <p class="section-title">Vault Files</p>
+                    <h2 class="mt-2 text-lg font-semibold text-cyan-200 md:text-xl">加密文件</h2>
+                </div>
+                <div class="text-sm leading-6 text-cyan-100/55">单文件上限 {{ max_upload_mb }}MB，上传、下载、删除都会记入审计日志。</div>
+            </div>
+
+            <div class="mt-5 content-scroll">
+                {% if not files %}
+                <div class="empty-state">
+                    <p class="orbitron text-lg text-cyan-700">VAULT EMPTY</p>
+                    <p class="mt-2 text-sm">当前保险库中还没有文件。</p>
+                </div>
+                {% else %}
+                <div class="mobile-stack">
+                    {% for file in files %}
+                    <article class="file-card">
+                        <div class="space-y-3">
+                            <div>
+                                <p class="section-title">Encrypted File</p>
+                                <div class="mt-2 text-sm font-medium text-cyan-100">
+                                    <span class="file-name-text" title="{{ file }}">{{ file }}</span>
+                                </div>
+                            </div>
+                            <form action="/download" method="post" class="download-form">
+                                <input type="hidden" name="filename" value="{{ file }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="password" name="password" required autocomplete="current-password" placeholder="输入访问密码后下载" class="download-password-field">
+                                <button type="submit" class="btn-neon w-full">解密下载</button>
+                            </form>
+                            <form action="/delete_file" method="post" class="stack-form">
+                                <input type="hidden" name="filename" value="{{ file }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="password" name="password" required autocomplete="current-password" placeholder="输入访问密码后删除" class="download-password-field">
+                                <button type="submit" class="btn-danger w-full" onclick="return window.confirm('确认删除当前文件？');">删除文件</button>
+                            </form>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+
+                <table class="desktop-table files-table mt-2 w-full text-left text-sm">
+                    <colgroup>
+                        <col>
+                        <col style="width: 420px;">
+                    </colgroup>
+                    <thead>
+                        <tr class="border-b border-cyan-900/70 text-cyan-600">
+                            <th class="pb-3 font-medium">文件名</th>
+                            <th class="pb-3 text-right font-medium">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for file in files %}
+                        <tr class="border-b border-cyan-900/30 align-middle">
+                            <td class="file-name-cell py-4 pr-4 text-cyan-100/85">
+                                <span class="file-name-text" title="{{ file }}">{{ file }}</span>
+                            </td>
+                            <td class="py-4 text-right">
+                                <div class="inline-actions justify-end">
+                                    <form action="/download" method="post" class="download-inline-form">
                                         <input type="hidden" name="filename" value="{{ file }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <input type="password" name="password" required autocomplete="current-password" placeholder="输入访问密码后下载" class="download-password-field">
-                                        <button type="submit" class="btn-neon w-full">解密下载</button>
+                                        <input type="password" name="password" required autocomplete="current-password" placeholder="访问密码" class="download-password-field">
+                                        <button type="submit" class="btn-neon px-4 py-2">解密下载</button>
+                                    </form>
+                                    <form action="/delete_file" method="post" class="download-inline-form">
+                                        <input type="hidden" name="filename" value="{{ file }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <input type="password" name="password" required autocomplete="current-password" placeholder="访问密码" class="download-password-field">
+                                        <button type="submit" class="btn-danger px-4 py-2" onclick="return window.confirm('确认删除当前文件？');">删除</button>
                                     </form>
                                 </div>
-                            </article>
-                            {% endfor %}
-                        </div>
-
-                        <table class="desktop-table files-table mt-2 w-full text-left text-sm">
-                                <colgroup>
-                                    <col>
-                                    <col style="width: 360px;">
-                                </colgroup>
-                            <thead>
-                                <tr class="border-b border-cyan-900/70 text-cyan-600">
-                                    <th class="pb-3 font-medium">文件名</th>
-                                    <th class="pb-3 text-right font-medium">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for file in files %}
-                                <tr class="border-b border-cyan-900/30 align-middle">
-                                    <td class="file-name-cell py-4 pr-4 text-cyan-100/85">
-                                        <span class="file-name-text" title="{{ file }}">{{ file }}</span>
-                                    </td>
-                                    <td class="py-4 text-right">
-                                        <form action="/download" method="post" class="download-inline-form">
-                                            <input type="hidden" name="filename" value="{{ file }}">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                            <input type="password" name="password" required autocomplete="current-password" placeholder="访问密码" class="download-password-field">
-                                            <button type="submit" class="btn-neon px-4 py-2">解密下载</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                        {% endif %}
-                    </div>
-
-                    <form action="/upload" method="post" enctype="multipart/form-data" class="mt-6 space-y-4 border-t border-cyan-900/60 pt-5">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <div class="grid gap-4 md:grid-cols-[1fr_auto]">
-                            <input type="file" name="file" required class="file-field">
-                            <button type="submit" class="btn-neon orbitron w-full md:min-w-[180px]">上传加密</button>
-                        </div>
-                    </form>
-                </section>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% endif %}
             </div>
-            {% endif %}
+
+            <form action="/upload" method="post" enctype="multipart/form-data" class="mt-6 stack-form border-t border-cyan-900/60 pt-5">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="grid gap-4 md:grid-cols-[1fr_auto]">
+                    <input type="file" name="file" required class="file-field">
+                    <button type="submit" class="btn-neon orbitron w-full md:min-w-[180px]">上传加密</button>
+                </div>
+            </form>
         </section>
-    </main>
-
-    <footer class="footer-meta">
-        <div>&copy; Aegis Vault. Licensed under the Apache License 2.0</div>
-        <div>GitHub:
-            <a href="https://github.com/keaidang/aegis-vault" target="_blank" rel="noopener noreferrer">keaidang </a> 邮箱: <a href="mailto:k@9o.pw">k@9o.pw</a></div>
-    </footer>
-
-    <script>
-        const remStart = {{ (remaining_total_s or 0)|int }};
-        const duressActive = {{ duress_active|tojson }};
-        const countdownEl = document.getElementById('countdown');
-        const idleCountdownEl = document.getElementById('idle-countdown');
-        const logoutForm = document.getElementById('logout-form');
-        const pageForms = Array.from(document.querySelectorAll('form'));
-        let remaining = remStart;
-        let idleRemaining = 60;
-        let idleTimerId = null;
-        let idleSubmitting = false;
-        let suppressReloadLock = false;
-
-        function renderCountdown(value) {
-            if (!countdownEl) return;
-            const safeValue = Math.max(0, value);
-            const hours = Math.floor(safeValue / 3600);
-            const minutes = Math.floor((safeValue % 3600) / 60);
-            const seconds = safeValue % 60;
-            countdownEl.textContent = [hours, minutes, seconds].map((item) => String(item).padStart(2, '0')).join(':');
-        }
-
-        if (countdownEl) {
-            renderCountdown(remaining);
-        }
-
-        if (countdownEl && remaining > 0) {
-            window.setInterval(() => {
-                if (!duressActive && remaining > 0) {
-                    remaining -= 1;
-                }
-                renderCountdown(remaining);
-            }, 1000);
-        }
-
-        function renderIdleCountdown(value) {
-            if (!idleCountdownEl) return;
-            const safeValue = Math.max(0, value);
-            idleCountdownEl.textContent = `${String(safeValue).padStart(2, '0')}s`;
-            idleCountdownEl.classList.toggle('is-warning', safeValue <= 10);
-        }
-
-        function submitIdleLogout() {
-            if (!logoutForm || idleSubmitting) return;
-            idleSubmitting = true;
-            logoutForm.submit();
-        }
-
-        function submitReloadLock() {
-            if (!logoutForm || idleSubmitting) return;
-            idleSubmitting = true;
-            logoutForm.submit();
-        }
-
-        function resetIdleCountdown() {
-            if (!idleCountdownEl || idleSubmitting) return;
-            idleRemaining = 60;
-            renderIdleCountdown(idleRemaining);
-        }
-
-        if (idleCountdownEl && logoutForm) {
-            renderIdleCountdown(idleRemaining);
-
-            idleTimerId = window.setInterval(() => {
-                idleRemaining -= 1;
-                renderIdleCountdown(idleRemaining);
-                if (idleRemaining <= 0) {
-                    window.clearInterval(idleTimerId);
-                    submitIdleLogout();
-                }
-            }, 1000);
-
-            ['pointerdown', 'pointermove', 'keydown', 'scroll', 'touchstart', 'click'].forEach((eventName) => {
-                window.addEventListener(eventName, resetIdleCountdown, { passive: true });
-            });
-        }
-
-        if (logoutForm) {
-            pageForms.forEach((formEl) => {
-                if (formEl === logoutForm) return;
-                formEl.addEventListener('submit', () => {
-                    suppressReloadLock = true;
-                });
-            });
-
-            window.addEventListener('keydown', (event) => {
-                const key = String(event.key || '').toLowerCase();
-                const refreshByShortcut = key === 'f5' || (key === 'r' && (event.ctrlKey || event.metaKey));
-                if (!refreshByShortcut) return;
-                event.preventDefault();
-                submitReloadLock();
-            });
-
-            const navEntry = performance.getEntriesByType('navigation')[0];
-            const isReloadNavigation = navEntry && navEntry.type === 'reload';
-            if (isReloadNavigation && !suppressReloadLock) {
-                window.setTimeout(() => submitReloadLock(), 10);
-            }
-        }
-
-        {% if msg %}
-        window.setTimeout(() => alert({{ msg|tojson }}), 50);
-        {% endif %}
-    </script>
-</body>
-</html>
+    </div>
+    {% endif %}
+{% endblock %}
