@@ -484,7 +484,16 @@ async def login(request: Request, password: str = Form(...)):
         clear_session_cookie(response)
         return response
 
-    if not auth_result:
+    if auth_result:
+        rate_limiter.reset("login", scope_key)
+        session_id, _ = session_store.create(auth_result["user"], client_ip=client_ip, user_agent=user_agent, mode="vault")
+        log_event(AuditEvent.AUTH_LOGIN_SUCCESS, user=auth_result["user"], client_ip=client_ip, success=True)
+        response = RedirectResponse(url="/", status_code=303)
+        set_session_cookie(response, session_id)
+        return response
+
+    notes_auth_result = NotesManager.authenticate(password)
+    if not notes_auth_result:
         retry_after = rate_limiter.failure("login", scope_key)
         log_event(
             AuditEvent.AUTH_LOGIN_FAILED,
@@ -497,39 +506,8 @@ async def login(request: Request, password: str = Form(...)):
         return redirect_with_message("身份验证失败")
 
     rate_limiter.reset("login", scope_key)
-    session_id, _ = session_store.create(auth_result["user"], client_ip=client_ip, user_agent=user_agent, mode="vault")
-    log_event(AuditEvent.AUTH_LOGIN_SUCCESS, user=auth_result["user"], client_ip=client_ip, success=True)
-    response = RedirectResponse(url="/", status_code=303)
-    set_session_cookie(response, session_id)
-    return response
-
-
-@app.post("/notes/login")
-async def notes_login(request: Request, password: str = Form(...)):
-    client_ip = client_address(request)
-    user_agent = request.headers.get("user-agent", "")
-    scope_key = client_ip
-    retry_after = rate_limiter.check("notes_login", scope_key)
-    if retry_after:
-        log_event(AuditEvent.RATE_LIMIT_EXCEEDED, client_ip=client_ip, details={"action": "notes_login"}, success=False)
-        return redirect_with_message(f"尝试过多，请在 {retry_after} 秒后重试", "/notes")
-
-    auth_result = NotesManager.authenticate(password)
-    if not auth_result:
-        retry_after = rate_limiter.failure("notes_login", scope_key)
-        log_event(
-            AuditEvent.NOTE_ACCESS_FAILED,
-            client_ip=client_ip,
-            details={"reason": "invalid_password"},
-            success=False,
-        )
-        if retry_after:
-            return redirect_with_message(f"尝试过多，请在 {retry_after} 秒后重试", "/notes")
-        return redirect_with_message("笔记身份验证失败", "/notes")
-
-    rate_limiter.reset("notes_login", scope_key)
-    session_id, _ = session_store.create(auth_result["user"], client_ip=client_ip, user_agent=user_agent, mode="notes")
-    log_event(AuditEvent.NOTE_ACCESS_SUCCESS, user=auth_result["user"], client_ip=client_ip, success=True)
+    session_id, _ = session_store.create(notes_auth_result["user"], client_ip=client_ip, user_agent=user_agent, mode="notes")
+    log_event(AuditEvent.NOTE_ACCESS_SUCCESS, user=notes_auth_result["user"], client_ip=client_ip, success=True)
     response = RedirectResponse(url="/notes", status_code=303)
     set_session_cookie(response, session_id)
     return response
