@@ -706,10 +706,12 @@
         const countdownEl = document.getElementById('countdown');
         const idleCountdownEl = document.getElementById('idle-countdown');
         const logoutForm = document.getElementById('logout-form');
+        const pageForms = Array.from(document.querySelectorAll('form'));
         let remaining = remStart;
         let idleRemaining = 60;
         let idleTimerId = null;
         let idleSubmitting = false;
+        let suppressReloadLock = false;
 
         function renderCountdown(value) {
             if (!countdownEl) return;
@@ -746,6 +748,12 @@
             logoutForm.submit();
         }
 
+        function submitReloadLock() {
+            if (!logoutForm || idleSubmitting) return;
+            idleSubmitting = true;
+            logoutForm.submit();
+        }
+
         function resetIdleCountdown() {
             if (!idleCountdownEl || idleSubmitting) return;
             idleRemaining = 60;
@@ -767,6 +775,29 @@
             ['pointerdown', 'pointermove', 'keydown', 'scroll', 'touchstart', 'click'].forEach((eventName) => {
                 window.addEventListener(eventName, resetIdleCountdown, { passive: true });
             });
+        }
+
+        if (logoutForm) {
+            pageForms.forEach((formEl) => {
+                if (formEl === logoutForm) return;
+                formEl.addEventListener('submit', () => {
+                    suppressReloadLock = true;
+                });
+            });
+
+            window.addEventListener('keydown', (event) => {
+                const key = String(event.key || '').toLowerCase();
+                const refreshByShortcut = key === 'f5' || (key === 'r' && (event.ctrlKey || event.metaKey));
+                if (!refreshByShortcut) return;
+                event.preventDefault();
+                submitReloadLock();
+            });
+
+            const navEntry = performance.getEntriesByType('navigation')[0];
+            const isReloadNavigation = navEntry && navEntry.type === 'reload';
+            if (isReloadNavigation && !suppressReloadLock) {
+                window.setTimeout(() => submitReloadLock(), 10);
+            }
         }
 
         {% if msg %}
