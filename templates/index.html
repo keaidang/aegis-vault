@@ -593,14 +593,12 @@
                                 <form action="/update_checkin_code" method="post" class="space-y-3">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="password" name="new_code" required minlength="6" autocomplete="new-password" placeholder="修改签到确认码" class="field">
-                                    <input type="password" name="confirm_code" required minlength="6" autocomplete="new-password" placeholder="再次输入签到确认码" class="field">
                                     <button type="submit" class="btn-neon w-full">更新签到协议</button>
                                 </form>
 
                                 <form action="/update_duress_code" method="post" class="space-y-3">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="password" name="duress_code" required minlength="6" autocomplete="new-password" placeholder="设置胁迫销毁码" class="field">
-                                    <input type="password" name="confirm_duress" required minlength="6" autocomplete="new-password" placeholder="再次输入胁迫销毁码" class="field">
                                     <button type="submit" class="btn-danger w-full">更新胁迫协议</button>
                                 </form>
 

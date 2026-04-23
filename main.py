@@ -430,12 +430,9 @@ async def manage_user(
 
 
 @app.post("/update_checkin_code")
-async def update_checkin_code(request: Request, csrf_token: str = Form(...), new_code: str = Form(...), confirm_code: str = Form(...)):
+async def update_checkin_code(request: Request, csrf_token: str = Form(...), new_code: str = Form(...)):
     _, session = require_session(request, csrf_token=csrf_token, admin_only=True)
-    
-    if new_code != confirm_code:
-        return redirect_with_message("两次输入的签到码不一致")
-    
+
     valid, msg = validate_code_strength(new_code)
     if not valid:
         return redirect_with_message(msg)
@@ -446,12 +443,9 @@ async def update_checkin_code(request: Request, csrf_token: str = Form(...), new
 
 
 @app.post("/update_duress_code")
-async def update_duress_code(request: Request, csrf_token: str = Form(...), duress_code: str = Form(...), confirm_duress: str = Form(...)):
+async def update_duress_code(request: Request, csrf_token: str = Form(...), duress_code: str = Form(...)):
     _, session = require_session(request, csrf_token=csrf_token, admin_only=True)
-    
-    if duress_code != confirm_duress:
-        return redirect_with_message("两次输入的胁迫销毁码不一致")
-    
+
     valid, msg = validate_code_strength(duress_code)
     if not valid:
         return redirect_with_message(msg)
