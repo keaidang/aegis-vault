@@ -43,6 +43,21 @@ class SecretHashingTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b"secret")
             self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
 
+    def test_private_key_record_uses_project_key_format(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            key_path = Path(tmp_dir) / "admin.key"
+            pub_path = Path(tmp_dir) / "admin.pub"
+
+            CryptoManager._create_key_pair(key_path, pub_path, "StrongPass-123!", "admin")
+
+            record = json.loads(key_path.read_text("utf-8"))
+            self.assertEqual(record["version"], "aegis-key-v2")
+            self.assertEqual(record["kdf"], "scrypt")
+            self.assertEqual(record["cipher"], "AES-256-GCM")
+            self.assertIsNotNone(CryptoManager._load_private_key(key_path, "StrongPass-123!"))
+            with self.assertRaises(ValueError):
+                CryptoManager._load_private_key(key_path, "wrong")
+
 
 if __name__ == "__main__":
     unittest.main()

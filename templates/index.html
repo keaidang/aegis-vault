@@ -1,7 +1,20 @@
 {% extends "base.html" %}
 
 {% block page_content %}
-    {% if not exists and not destroyed %}
+    {% if reinit_required %}
+    <div class="mx-auto mt-6 max-w-2xl">
+        <div class="panel danger-border rounded-[1.25rem] px-5 py-7 text-center md:px-8 md:py-10">
+            <div class="space-y-3">
+                <p class="section-title text-red-300/80">Key Format Upgrade</p>
+                <h2 class="orbitron text-2xl text-red-300 md:text-3xl">需要重新初始化</h2>
+                <p class="mx-auto max-w-xl text-sm leading-7 text-red-100/70">检测到旧版密钥格式。当前版本使用新的 scrypt + AES-GCM 私钥格式，请重置系统后重新初始化。</p>
+            </div>
+            <form action="/reset" method="post" class="mt-8">
+                <button type="submit" class="btn-neon orbitron w-full md:w-auto md:px-8" onclick="return window.confirm('确认重置系统？这会清空当前密钥和保险库内容。');">重新初始化系统</button>
+            </form>
+        </div>
+    </div>
+    {% elif not exists and not destroyed %}
     <div class="mx-auto mt-6 max-w-2xl">
         <div class="panel neon-border rounded-[1.25rem] px-5 py-6 md:px-7 md:py-8">
             <div class="mb-6 space-y-2 text-center">

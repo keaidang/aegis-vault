@@ -1,14 +1,13 @@
 """
-审计日志系统 - 记录所有安全相关的关键操作
-支持链式哈希以防篡改
+审计日志系统 - JSONL 格式记录安全事件，支持链式哈希防篡改。
 """
+import hashlib
 import json
-import logging
 import os
 import threading
-import hashlib
 from datetime import datetime
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,24 +16,10 @@ AUDIT_LOG_PATH = Path(os.getenv("AUDIT_LOG_DIR", "./data")) / "audit.log"
 AUDIT_LOG_HASH_PATH = Path(os.getenv("AUDIT_LOG_DIR", "./data")) / "audit.hash"
 AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(AUDIT_LOG_PATH),
-        logging.StreamHandler()
-    ]
-)
-
-audit_logger = logging.getLogger("AUDIT")
 audit_lock = threading.RLock()
 
 
 class AuditEvent:
-    """审计事件"""
-    
-    # 事件类型常量
     AUTH_LOGIN_SUCCESS = "AUTH_LOGIN_SUCCESS"
     AUTH_LOGIN_FAILED = "AUTH_LOGIN_FAILED"
     AUTH_LOGOUT = "AUTH_LOGOUT"
@@ -64,24 +49,35 @@ class AuditEvent:
 
 
 def _compute_chain_hash(current_hash: str, previous_hash: str = "") -> str:
-    """计算链式哈希"""
-    chain_input = f"{previous_hash}:{current_hash}"
-    return hashlib.sha256(chain_input.encode()).hexdigest()
+    return hashlib.sha256(f"{previous_hash}:{current_hash}".encode()).hexdigest()
+
+
+def _event_hash(event_data: dict) -> str:
+    event_json = json.dumps(event_data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(event_json.encode()).hexdigest()
 
 
 def _get_previous_chain_hash() -> str:
-    """获取前一条日志的链式哈希"""
     if not AUDIT_LOG_HASH_PATH.exists():
         return ""
     try:
-        with open(AUDIT_LOG_HASH_PATH, "r") as f:
-            return f.read().strip()
-    except Exception:
+        return AUDIT_LOG_HASH_PATH.read_text().strip()
+    except OSError:
         return ""
 
 
 def _parse_audit_line(line: str) -> dict | None:
-    """Extract the JSON audit event from a logging-formatted line."""
+    line = line.strip()
+    if not line:
+        return None
+    try:
+        event = json.loads(line)
+        return event if isinstance(event, dict) else None
+    except json.JSONDecodeError:
+        pass
+
+    # Backward compatibility for previous Python logging format:
+    # "time - AUDIT - INFO - {json}"
     if " - AUDIT - " not in line:
         return None
     try:
@@ -94,23 +90,20 @@ def _parse_audit_line(line: str) -> dict | None:
     return event if isinstance(event, dict) else None
 
 
+def _write_text_atomic(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(content, encoding="utf-8")
+    os.replace(tmp_path, path)
+
+
 def log_event(
     event_type: str,
     user: str | None = None,
     client_ip: str | None = None,
     details: dict | None = None,
-    success: bool = True
+    success: bool = True,
 ) -> None:
-    """
-    记录审计事件
-    
-    Args:
-        event_type: 事件类型
-        user: 用户名
-        client_ip: 客户端 IP
-        details: 事件详情字典
-        success: 是否成功
-    """
     with audit_lock:
         event_data = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -118,101 +111,60 @@ def log_event(
             "user": user or "anonymous",
             "client_ip": client_ip or "unknown",
             "success": success,
-            "details": details or {}
+            "details": details or {},
         }
-        
-        # 计算事件的哈希
-        event_json = json.dumps(event_data, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-        event_hash = hashlib.sha256(event_json.encode()).hexdigest()
-        
-        # 获取前一条的链式哈希
-        previous_chain_hash = _get_previous_chain_hash()
-        
-        # 计算本条的链式哈希
-        chain_hash = _compute_chain_hash(event_hash, previous_chain_hash)
-        
-        # 添加链式哈希到事件数据
+        event_hash = _event_hash(event_data)
+        chain_hash = _compute_chain_hash(event_hash, _get_previous_chain_hash())
         event_data["_hash"] = event_hash
         event_data["_chain_hash"] = chain_hash
-        
-        # 日志级别
-        level = logging.INFO if success else logging.WARNING
-        
-        # 记录为 JSON 便于解析
-        audit_logger.log(level, json.dumps(event_data, ensure_ascii=False))
-        
-        # 更新链式哈希文件
-        try:
-            with open(AUDIT_LOG_HASH_PATH, "w") as f:
-                f.write(chain_hash)
-        except Exception:
-            pass
+
+        with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as log_file:
+            log_file.write(json.dumps(event_data, ensure_ascii=False, separators=(",", ":")) + "\n")
+            log_file.flush()
+            os.fsync(log_file.fileno())
+        _write_text_atomic(AUDIT_LOG_HASH_PATH, chain_hash)
 
 
 def verify_audit_chain() -> bool:
-    """验证审计日志的链式完整性"""
     if not AUDIT_LOG_PATH.exists():
         return True
-    
+
     try:
         with audit_lock:
-            with open(AUDIT_LOG_PATH, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-            
             previous_chain_hash = ""
             parsed_count = 0
-            for line in lines:
+            for line in AUDIT_LOG_PATH.read_text(encoding="utf-8").splitlines():
                 event = _parse_audit_line(line)
                 if event is None:
                     continue
-
                 parsed_count += 1
                 event_hash = event.get("_hash", "")
                 chain_hash = event.get("_chain_hash", "")
-
-                # 验证链式哈希
-                expected_chain = _compute_chain_hash(event_hash, previous_chain_hash)
-                if chain_hash != expected_chain:
+                if chain_hash != _compute_chain_hash(event_hash, previous_chain_hash):
                     return False
-
                 previous_chain_hash = chain_hash
-
-            return parsed_count > 0 or not lines
-    except Exception:
+            return parsed_count > 0 or AUDIT_LOG_PATH.stat().st_size == 0
+    except OSError:
         return False
 
 
 def get_audit_logs(limit: int = 100, event_type: str | None = None) -> list[dict]:
-    """
-    获取审计日志
-    
-    Args:
-        limit: 返回的最大日志数
-        event_type: 过滤的事件类型，为 None 时返回所有
-        
-    Returns:
-        审计事件列表
-    """
-    logs = []
-    
     if not AUDIT_LOG_PATH.exists():
-        return logs
-    
+        return []
+
+    logs = []
     with audit_lock:
         try:
-            with open(AUDIT_LOG_PATH, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-                # 从末尾开始读取，最多 limit 条
-                for line in reversed(lines[-limit * 10:]):
-                    event = _parse_audit_line(line)
-                    if event is None:
-                        continue
-                    if event_type is None or event.get("event_type") == event_type:
-                        logs.append(event)
+            lines = AUDIT_LOG_PATH.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
 
-                    if len(logs) >= limit:
-                        break
-        except Exception as e:
-            audit_logger.error(f"读取审计日志失败: {e}")
-    
+    for line in reversed(lines[-limit * 10:]):
+        event = _parse_audit_line(line)
+        if event is None:
+            continue
+        if event_type is None or event.get("event_type") == event_type:
+            logs.append(event)
+        if len(logs) >= limit:
+            break
     return logs

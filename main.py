@@ -1,8 +1,8 @@
 import os
-import tempfile
 import threading
 import time
 import json
+from ipaddress import ip_address, ip_network
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, unquote
@@ -11,9 +11,9 @@ from zoneinfo import ZoneInfo
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.background import BackgroundTask
 
 from audit_logger import AuditEvent, get_audit_logs, log_event, verify_audit_chain
 from crypto import CHECKIN_TIMEOUT, KEY_DIR, VAULT_DIR, CryptoManager
@@ -26,6 +26,7 @@ load_dotenv()
 app = FastAPI()
 
 TEMPLATE_DIR = os.getenv("TEMPLATE_DIR", "./templates")
+STATIC_DIR = os.getenv("STATIC_DIR", "./static")
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_HOURS", 12)) * 3600
 MAX_VAULT_SIZE_BYTES = int(os.getenv("MAX_VAULT_SIZE_MB", 1024)) * 1024 * 1024
 MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", 64)) * 1024 * 1024
@@ -34,7 +35,13 @@ SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "
 MONITOR_INTERVAL_SECONDS = int(os.getenv("MONITOR_INTERVAL_SECONDS", "5"))
 FLASH_COOKIE_NAME = "aegis_flash"
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+TRUSTED_PROXY_IPS = [
+    item.strip()
+    for item in os.getenv("TRUSTED_PROXY_IPS", "127.0.0.1,::1").split(",")
+    if item.strip()
+]
 
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 session_store = SessionStore(ttl_seconds=SESSION_TTL_SECONDS)
 rate_limiter = RateLimiter(max_attempts=5, window_seconds=600, lockout_seconds=900)
@@ -84,7 +91,31 @@ def render_page(request: Request, template_name: str, context: dict) -> HTMLResp
 
 
 def client_address(request: Request) -> str:
-    return request.client.host if request.client and request.client.host else "unknown"
+    direct_host = request.client.host if request.client and request.client.host else "unknown"
+    try:
+        direct_ip = ip_address(direct_host)
+        trusted = any(direct_ip in ip_network(proxy, strict=False) for proxy in TRUSTED_PROXY_IPS)
+    except ValueError:
+        trusted = False
+    if trusted:
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        forwarded_host = forwarded_for.split(",", 1)[0].strip()
+        if forwarded_host:
+            try:
+                return str(ip_address(forwarded_host))
+            except ValueError:
+                pass
+    return direct_host
+
+
+def download_bytes_response(content: bytes, filename: str) -> StreamingResponse:
+    quoted_name = quote(filename)
+    headers = {
+        "Cache-Control": "no-store",
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quoted_name}",
+        "Content-Length": str(len(content)),
+    }
+    return StreamingResponse(iter([content]), media_type="application/octet-stream", headers=headers)
 
 
 def get_vault_size() -> int:
@@ -211,6 +242,7 @@ def build_common_context(
 ) -> dict:
     status = CryptoManager.get_status()
     exists = (KEY_DIR / "admin.key").exists()
+    reinit_required = CryptoManager.requires_reinitialization()
     remaining_seconds = 0
 
     if status.get("_tampered"):
@@ -220,7 +252,7 @@ def build_common_context(
         msg = "检测到状态文件篡改，系统已自毁"
         status = CryptoManager.get_status()
 
-    if exists and not status["destroyed"]:
+    if exists and not status["destroyed"] and not reinit_required:
         elapsed = int(time.time()) - status["last_checkin"]
         remaining_seconds = max(0, CHECKIN_TIMEOUT - elapsed)
 
@@ -243,6 +275,7 @@ def build_common_context(
         and session
         and exists
         and not status["destroyed"]
+        and not reinit_required
         and session_key_exists
         and (auth_mode is None or session_mode == auth_mode)
     ):
@@ -260,6 +293,7 @@ def build_common_context(
 
     return {
         "exists": exists,
+        "reinit_required": reinit_required,
         "destroyed": status["destroyed"],
         "remaining_total_s": remaining_seconds,
         "auth": auth,
@@ -387,10 +421,6 @@ def read_upload_bytes(upload: UploadFile, max_size: int) -> bytes:
     return b"".join(chunks)
 
 
-def remove_file(path: str) -> None:
-    Path(path).unlink(missing_ok=True)
-
-
 def validate_password_strength(password: str, min_length: int = 12) -> tuple[bool, str]:
     password = password.strip()
     if len(password) < min_length:
@@ -425,7 +455,7 @@ def monitor_switch() -> None:
     CryptoManager.ensure_dirs()
     while True:
         status = CryptoManager.get_status()
-        if not status["destroyed"] and (KEY_DIR / "admin.key").exists():
+        if not status["destroyed"] and (KEY_DIR / "admin.key").exists() and not CryptoManager.requires_reinitialization():
             if status.get("_tampered"):
                 CryptoManager.destroy_all()
                 log_event(AuditEvent.SYSTEM_DESTROYED, details={"reason": "status_file_tampered"}, success=True)
@@ -455,9 +485,9 @@ async def security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com data:; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
         "img-src 'self' data:; "
         "base-uri 'self'; "
         "form-action 'self'; "
@@ -621,7 +651,7 @@ async def setup(
 async def reset(request: Request, csrf_token: str | None = Form(None)):
     status = CryptoManager.get_status()
     session = None
-    if not status["destroyed"]:
+    if not status["destroyed"] and not CryptoManager.requires_reinitialization():
         _, session = require_session(request, csrf_token=csrf_token, admin_only=True, required_mode="vault")
     session_store.clear()
     CryptoManager.reset_system()
@@ -903,12 +933,6 @@ async def download(
 
     rate_limiter.reset("download", scope_key)
     download_name = safe_name[:-4] if safe_name.endswith(".aes") else safe_name
-    temp_dir = Path("/tmp/aegis")
-    temp_dir.mkdir(exist_ok=True)
-    fd, temp_path = tempfile.mkstemp(prefix="aegis-", suffix=f"-{download_name}", dir=temp_dir)
-    with os.fdopen(fd, "wb") as temp_file:
-        temp_file.write(decrypted_content)
-
     log_event(
         AuditEvent.FILE_DOWNLOADED,
         user=session["user"],
@@ -916,12 +940,7 @@ async def download(
         details={"filename": safe_name, "size_bytes": len(decrypted_content)},
         success=True,
     )
-    return FileResponse(
-        temp_path,
-        filename=download_name,
-        background=BackgroundTask(remove_file, temp_path),
-        headers={"Cache-Control": "no-store"},
-    )
+    return download_bytes_response(decrypted_content, download_name)
 
 
 @app.post("/notes/view")
@@ -1143,13 +1162,6 @@ async def download_note_attachment(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="附件不存在") from exc
 
-    temp_dir = Path("/tmp/aegis")
-    temp_dir.mkdir(exist_ok=True)
-    suffix = f"-{attachment['name']}"
-    fd, temp_path = tempfile.mkstemp(prefix="aegis-note-", suffix=suffix, dir=temp_dir)
-    with os.fdopen(fd, "wb") as temp_file:
-        temp_file.write(content)
-
     log_event(
         AuditEvent.NOTE_ATTACHMENT_DOWNLOADED,
         user=session["user"],
@@ -1157,12 +1169,7 @@ async def download_note_attachment(
         details={"note_id": note_id, "attachment_id": attachment_id, "filename": attachment["name"]},
         success=True,
     )
-    return FileResponse(
-        temp_path,
-        filename=attachment["name"],
-        background=BackgroundTask(remove_file, temp_path),
-        headers={"Cache-Control": "no-store"},
-    )
+    return download_bytes_response(content, attachment["name"])
 
 
 @app.post("/notes/attachment/delete")
