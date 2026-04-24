@@ -80,6 +80,20 @@ def _get_previous_chain_hash() -> str:
         return ""
 
 
+def _parse_audit_line(line: str) -> dict | None:
+    """Extract the JSON audit event from a logging-formatted line."""
+    if " - AUDIT - " not in line:
+        return None
+    try:
+        payload = line.split(" - AUDIT - ", 1)[1].strip()
+        if " - " in payload:
+            payload = payload.split(" - ", 1)[1].strip()
+        event = json.loads(payload)
+    except (json.JSONDecodeError, IndexError):
+        return None
+    return event if isinstance(event, dict) else None
+
+
 def log_event(
     event_type: str,
     user: str | None = None,
@@ -146,27 +160,24 @@ def verify_audit_chain() -> bool:
                 lines = f.readlines()
             
             previous_chain_hash = ""
+            parsed_count = 0
             for line in lines:
-                try:
-                    if " - AUDIT - " not in line:
-                        continue
-                    
-                    json_str = line.split(" - AUDIT - ", 1)[1].strip()
-                    event = json.loads(json_str)
-                    
-                    event_hash = event.get("_hash", "")
-                    chain_hash = event.get("_chain_hash", "")
-                    
-                    # 验证链式哈希
-                    expected_chain = _compute_chain_hash(event_hash, previous_chain_hash)
-                    if chain_hash != expected_chain:
-                        return False
-                    
-                    previous_chain_hash = chain_hash
-                except (json.JSONDecodeError, IndexError):
+                event = _parse_audit_line(line)
+                if event is None:
                     continue
-            
-            return True
+
+                parsed_count += 1
+                event_hash = event.get("_hash", "")
+                chain_hash = event.get("_chain_hash", "")
+
+                # 验证链式哈希
+                expected_chain = _compute_chain_hash(event_hash, previous_chain_hash)
+                if chain_hash != expected_chain:
+                    return False
+
+                previous_chain_hash = chain_hash
+
+            return parsed_count > 0 or not lines
     except Exception:
         return False
 
@@ -193,19 +204,14 @@ def get_audit_logs(limit: int = 100, event_type: str | None = None) -> list[dict
                 lines = f.readlines()
                 # 从末尾开始读取，最多 limit 条
                 for line in reversed(lines[-limit * 10:]):
-                    try:
-                        # 解析 JSON 日志
-                        if " - AUDIT - " in line:
-                            json_str = line.split(" - AUDIT - ", 1)[1].strip()
-                            event = json.loads(json_str)
-                            
-                            if event_type is None or event.get("event_type") == event_type:
-                                logs.append(event)
-                                
-                            if len(logs) >= limit:
-                                break
-                    except (json.JSONDecodeError, IndexError):
+                    event = _parse_audit_line(line)
+                    if event is None:
                         continue
+                    if event_type is None or event.get("event_type") == event_type:
+                        logs.append(event)
+
+                    if len(logs) >= limit:
+                        break
         except Exception as e:
             audit_logger.error(f"读取审计日志失败: {e}")
     
