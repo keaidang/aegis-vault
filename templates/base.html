@@ -173,6 +173,10 @@
             cursor: pointer;
         }
 
+        .secure-entry {
+            -webkit-text-security: disc;
+        }
+
         .btn-neon,
         .btn-danger,
         .btn-muted,
@@ -631,35 +635,40 @@
                 formEl.setAttribute('autocomplete', 'off');
                 formEl.setAttribute('data-lpignore', 'true');
                 formEl.setAttribute('data-1p-ignore', 'true');
+                formEl.setAttribute('data-form-type', 'other');
 
-                if (!formEl.querySelector('input[type="password"]') || formEl.dataset.autofillDecoy === 'true') {
+                if (formEl.dataset.secretPayloadBound === 'true') {
                     return;
                 }
 
-                const decoyWrap = document.createElement('div');
-                decoyWrap.setAttribute('aria-hidden', 'true');
-                decoyWrap.style.position = 'absolute';
-                decoyWrap.style.left = '-9999px';
-                decoyWrap.style.width = '1px';
-                decoyWrap.style.height = '1px';
-                decoyWrap.style.opacity = '0';
-                decoyWrap.style.pointerEvents = 'none';
+                const appendSecretFields = (append) => {
+                    formEl.querySelectorAll('input[data-secret-name]').forEach((field) => {
+                        if (!(field instanceof HTMLInputElement)) {
+                            return;
+                        }
 
-                const fakeUser = document.createElement('input');
-                fakeUser.type = 'text';
-                fakeUser.name = 'decoy_username';
-                fakeUser.autocomplete = 'username';
-                fakeUser.tabIndex = -1;
+                        append(field.dataset.secretName, field.value);
+                    });
+                };
 
-                const fakePass = document.createElement('input');
-                fakePass.type = 'password';
-                fakePass.name = 'decoy_password';
-                fakePass.autocomplete = 'current-password';
-                fakePass.tabIndex = -1;
-
-                decoyWrap.append(fakeUser, fakePass);
-                formEl.prepend(decoyWrap);
-                formEl.dataset.autofillDecoy = 'true';
+                if ('FormDataEvent' in window) {
+                    formEl.addEventListener('formdata', (event) => {
+                        appendSecretFields((name, value) => event.formData.append(name, value));
+                    });
+                } else {
+                    formEl.addEventListener('submit', () => {
+                        formEl.querySelectorAll('input[data-secret-payload="true"]').forEach((field) => field.remove());
+                        appendSecretFields((name, value) => {
+                            const payload = document.createElement('input');
+                            payload.type = 'hidden';
+                            payload.name = name;
+                            payload.value = value;
+                            payload.setAttribute('data-secret-payload', 'true');
+                            formEl.append(payload);
+                        });
+                    });
+                }
+                formEl.dataset.secretPayloadBound = 'true';
             });
 
             const guardedFields = Array.from(document.querySelectorAll(
@@ -667,13 +676,21 @@
             ));
 
             guardedFields.forEach((field) => {
-                const isPassword = field instanceof HTMLInputElement && field.type === 'password';
-                field.setAttribute('autocomplete', isPassword ? 'new-password' : 'off');
+                const isSecret = field instanceof HTMLInputElement && field.hasAttribute('data-secret-name');
+                field.setAttribute('autocomplete', 'off');
                 field.setAttribute('autocorrect', 'off');
                 field.setAttribute('autocapitalize', 'none');
                 field.setAttribute('spellcheck', 'false');
                 field.setAttribute('data-lpignore', 'true');
                 field.setAttribute('data-1p-ignore', 'true');
+                field.setAttribute('data-form-type', 'other');
+
+                if (isSecret) {
+                    field.removeAttribute('name');
+                    field.type = 'text';
+                    field.inputMode = 'text';
+                    field.classList.add('secure-entry');
+                }
 
                 if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) || field.dataset.autofillGuard === 'true') {
                     return;

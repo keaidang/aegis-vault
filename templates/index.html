@@ -10,9 +10,9 @@
                 <p class="text-sm text-cyan-100/65">首次部署后创建管理员密钥和签到协议。</p>
             </div>
             <form action="/setup" method="post" class="stack-form">
-                <input type="password" name="master_password" required minlength="10" autocomplete="new-password" placeholder="设置管理员总密码" class="field">
-                <input type="password" name="confirm_master_password" required minlength="10" autocomplete="new-password" placeholder="再次输入管理员总密码" class="field">
-                <input type="password" name="checkin_code" required minlength="6" autocomplete="new-password" placeholder="设置签到确认码" class="field">
+                <input type="text" data-secret-name="master_password" required minlength="10" autocomplete="off" placeholder="设置管理员总密码" class="field secure-entry">
+                <input type="text" data-secret-name="confirm_master_password" required minlength="10" autocomplete="off" placeholder="再次输入管理员总密码" class="field secure-entry">
+                <input type="text" data-secret-name="checkin_code" required minlength="6" autocomplete="off" placeholder="设置签到确认码" class="field secure-entry">
                 <button type="submit" class="btn-neon orbitron w-full">生成 RSA-4096 密钥对</button>
             </form>
         </div>
@@ -43,7 +43,7 @@
                     <p class="mt-3 text-sm leading-6 text-cyan-100/60">输入正确签到码后会立即重置计时器。</p>
                 </div>
                 <form action="/checkin" method="post" class="stack-form">
-                    <input type="password" name="checkin_code" required autocomplete="new-password" placeholder="输入签到码重置计时器" class="field">
+                    <input type="text" data-secret-name="checkin_code" required autocomplete="off" placeholder="输入签到码重置计时器" class="field secure-entry">
                     <button type="submit" class="btn-neon orbitron w-full">重置协议计时器</button>
                 </form>
             </div>
@@ -60,7 +60,7 @@
                     <p class="mt-3 text-sm leading-6 text-cyan-100/60">请输入密码登录神盾系统</p>
                 </div>
                 <form action="/login" method="post" class="stack-form">
-                    <input type="password" name="password" required autocomplete="new-password" placeholder="输入系统密码" class="field">
+                    <input type="text" data-secret-name="password" required autocomplete="off" placeholder="输入系统密码" class="field secure-entry">
                     <button type="submit" class="btn-neon orbitron w-full">进入系统</button>
                 </form>
             </div>
@@ -110,8 +110,8 @@
                                 <option value="{{ user }}">{{ "管理员" if user == "admin" else user }}</option>
                                 {% endfor %}
                             </select>
-                            <input type="password" name="target_pass" required minlength="10" autocomplete="new-password" placeholder="设置访问密码" class="field">
-                            <input type="password" name="confirm_target_pass" required minlength="10" autocomplete="new-password" placeholder="再次输入访问密码" class="field">
+                            <input type="text" data-secret-name="target_pass" required minlength="10" autocomplete="off" placeholder="设置访问密码" class="field secure-entry">
+                            <input type="text" data-secret-name="confirm_target_pass" required minlength="10" autocomplete="off" placeholder="再次输入访问密码" class="field secure-entry">
                             <button type="submit" class="btn-neon w-full">更新用户密钥</button>
                         </form>
 
@@ -126,20 +126,20 @@
                                 <input type="checkbox" name="enabled" value="on">
                                 <span>启用神盾笔记</span>
                             </label>
-                            <input type="password" name="note_password" autocomplete="new-password" placeholder="设置笔记独立密码" class="field">
-                            <input type="password" name="confirm_note_password" autocomplete="new-password" placeholder="再次输入笔记密码" class="field">
+                            <input type="text" data-secret-name="note_password" autocomplete="off" placeholder="设置笔记独立密码" class="field secure-entry">
+                            <input type="text" data-secret-name="confirm_note_password" autocomplete="off" placeholder="再次输入笔记密码" class="field secure-entry">
                             <button type="submit" class="btn-neon w-full">更新笔记功能</button>
                         </form>
 
                         <form action="/update_checkin_code" method="post" class="dense-form">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                            <input type="password" name="new_code" required minlength="6" autocomplete="new-password" placeholder="修改签到确认码" class="field">
+                            <input type="text" data-secret-name="new_code" required minlength="6" autocomplete="off" placeholder="修改签到确认码" class="field secure-entry">
                             <button type="submit" class="btn-neon w-full">更新签到协议</button>
                         </form>
 
                         <form action="/update_duress_code" method="post" class="dense-form">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                            <input type="password" name="duress_code" required minlength="6" autocomplete="new-password" placeholder="设置胁迫销毁码" class="field">
+                            <input type="text" data-secret-name="duress_code" required minlength="6" autocomplete="off" placeholder="设置胁迫销毁码" class="field secure-entry">
                             <button type="submit" class="btn-danger w-full">更新胁迫协议</button>
                         </form>
 
@@ -184,13 +184,13 @@
                             <form action="/download" method="post" class="download-form">
                                 <input type="hidden" name="filename" value="{{ file }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <input type="password" name="password" required autocomplete="new-password" placeholder="输入访问密码后下载" class="download-password-field">
+                                <input type="text" data-secret-name="password" required autocomplete="off" placeholder="输入访问密码后下载" class="download-password-field secure-entry">
                                 <button type="submit" class="btn-neon w-full">解密下载</button>
                             </form>
                             <form action="/delete_file" method="post" class="stack-form">
                                 <input type="hidden" name="filename" value="{{ file }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <input type="password" name="password" required autocomplete="new-password" placeholder="输入访问密码后删除" class="download-password-field">
+                                <input type="text" data-secret-name="password" required autocomplete="off" placeholder="输入访问密码后删除" class="download-password-field secure-entry">
                                 <button type="submit" class="btn-danger w-full" onclick="return window.confirm('确认删除当前文件？');">删除文件</button>
                             </form>
                         </div>
@@ -220,13 +220,13 @@
                                     <form action="/download" method="post" class="download-inline-form">
                                         <input type="hidden" name="filename" value="{{ file }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <input type="password" name="password" required autocomplete="new-password" placeholder="访问密码" class="download-password-field">
+                                        <input type="text" data-secret-name="password" required autocomplete="off" placeholder="访问密码" class="download-password-field secure-entry">
                                         <button type="submit" class="btn-neon px-4 py-2">解密下载</button>
                                     </form>
                                     <form action="/delete_file" method="post" class="download-inline-form">
                                         <input type="hidden" name="filename" value="{{ file }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <input type="password" name="password" required autocomplete="new-password" placeholder="访问密码" class="download-password-field">
+                                        <input type="text" data-secret-name="password" required autocomplete="off" placeholder="访问密码" class="download-password-field secure-entry">
                                         <button type="submit" class="btn-danger px-4 py-2" onclick="return window.confirm('确认删除当前文件？');">删除</button>
                                     </form>
                                 </div>
