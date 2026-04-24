@@ -43,7 +43,7 @@
                     <p class="mt-3 text-sm leading-6 text-cyan-100/60">输入正确签到码后会立即重置计时器。</p>
                 </div>
                 <form action="/checkin" method="post" class="stack-form">
-                    <input type="password" name="checkin_code" required autocomplete="current-password" placeholder="输入签到码重置计时器" class="field">
+                    <input type="password" name="checkin_code" required autocomplete="new-password" placeholder="输入签到码重置计时器" class="field">
                     <button type="submit" class="btn-neon orbitron w-full">重置协议计时器</button>
                 </form>
             </div>
@@ -60,7 +60,7 @@
                     <p class="mt-3 text-sm leading-6 text-cyan-100/60">请输入密码登录神盾系统</p>
                 </div>
                 <form action="/login" method="post" class="stack-form">
-                    <input type="password" name="password" required autocomplete="current-password" placeholder="输入系统密码" class="field">
+                    <input type="password" name="password" required autocomplete="new-password" placeholder="输入系统密码" class="field">
                     <button type="submit" class="btn-neon orbitron w-full">进入系统</button>
                 </form>
             </div>
@@ -184,13 +184,13 @@
                             <form action="/download" method="post" class="download-form">
                                 <input type="hidden" name="filename" value="{{ file }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <input type="password" name="password" required autocomplete="current-password" placeholder="输入访问密码后下载" class="download-password-field">
+                                <input type="password" name="password" required autocomplete="new-password" placeholder="输入访问密码后下载" class="download-password-field">
                                 <button type="submit" class="btn-neon w-full">解密下载</button>
                             </form>
                             <form action="/delete_file" method="post" class="stack-form">
                                 <input type="hidden" name="filename" value="{{ file }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <input type="password" name="password" required autocomplete="current-password" placeholder="输入访问密码后删除" class="download-password-field">
+                                <input type="password" name="password" required autocomplete="new-password" placeholder="输入访问密码后删除" class="download-password-field">
                                 <button type="submit" class="btn-danger w-full" onclick="return window.confirm('确认删除当前文件？');">删除文件</button>
                             </form>
                         </div>
@@ -220,13 +220,13 @@
                                     <form action="/download" method="post" class="download-inline-form">
                                         <input type="hidden" name="filename" value="{{ file }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <input type="password" name="password" required autocomplete="current-password" placeholder="访问密码" class="download-password-field">
+                                        <input type="password" name="password" required autocomplete="new-password" placeholder="访问密码" class="download-password-field">
                                         <button type="submit" class="btn-neon px-4 py-2">解密下载</button>
                                     </form>
                                     <form action="/delete_file" method="post" class="download-inline-form">
                                         <input type="hidden" name="filename" value="{{ file }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <input type="password" name="password" required autocomplete="current-password" placeholder="访问密码" class="download-password-field">
+                                        <input type="password" name="password" required autocomplete="new-password" placeholder="访问密码" class="download-password-field">
                                         <button type="submit" class="btn-danger px-4 py-2" onclick="return window.confirm('确认删除当前文件？');">删除</button>
                                     </form>
                                 </div>

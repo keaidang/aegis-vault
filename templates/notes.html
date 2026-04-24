@@ -12,7 +12,7 @@
                     <p class="mt-3 text-sm leading-6 text-cyan-100/65">输入笔记密码进入神盾笔记。</p>
                 </div>
                 <form action="/login" method="post" class="stack-form">
-                    <input type="password" name="password" required autocomplete="current-password" placeholder="输入笔记密码" class="field">
+                    <input type="password" name="password" required autocomplete="new-password" placeholder="输入笔记密码" class="field">
                     <button type="submit" class="btn-neon orbitron w-full">进入笔记</button>
                 </form>
             </div>
@@ -87,7 +87,7 @@
                                     <p class="section-title">Decrypt Note</p>
                                     <h3 class="mt-2 text-base font-semibold text-cyan-200">输入笔记密码查看当前笔记</h3>
                                 </div>
-                                <input type="password" name="note_password" required autocomplete="current-password" placeholder="输入笔记密码查看该笔记" class="field">
+                                <input type="password" name="note_password" required autocomplete="new-password" placeholder="输入笔记密码查看该笔记" class="field">
                                 <button type="submit" class="btn-neon orbitron">查看当前笔记</button>
                             </form>
                             {% endif %}
@@ -106,7 +106,7 @@
                             <form action="/notes/delete" method="post" class="stack-form">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="note_id" value="{{ selected_note.note_id }}">
-                                <input type="password" name="note_password" required autocomplete="current-password" placeholder="输入笔记密码后删除" class="download-password-field">
+                                <input type="password" name="note_password" required autocomplete="new-password" placeholder="输入笔记密码后删除" class="download-password-field">
                                 <button type="submit" class="btn-danger" onclick="return window.confirm('确认删除当前笔记？');">删除笔记</button>
                             </form>
 
@@ -173,14 +173,14 @@
                                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                                     <input type="hidden" name="note_id" value="{{ selected_note.note_id }}">
                                                     <input type="hidden" name="attachment_id" value="{{ attachment.attachment_id }}">
-                                                    <input type="password" name="note_password" required autocomplete="current-password" placeholder="笔记密码" class="download-password-field">
+                                                    <input type="password" name="note_password" required autocomplete="new-password" placeholder="笔记密码" class="download-password-field">
                                                     <button type="submit" class="btn-neon">下载附件</button>
                                                 </form>
                                                 <form action="/notes/attachment/delete" method="post" class="download-inline-form">
                                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                                     <input type="hidden" name="note_id" value="{{ selected_note.note_id }}">
                                                     <input type="hidden" name="attachment_id" value="{{ attachment.attachment_id }}">
-                                                    <input type="password" name="note_password" required autocomplete="current-password" placeholder="笔记密码" class="download-password-field">
+                                                    <input type="password" name="note_password" required autocomplete="new-password" placeholder="笔记密码" class="download-password-field">
                                                     <button type="submit" class="btn-danger" onclick="return window.confirm('确认删除当前附件？');">删除附件</button>
                                                 </form>
                                             </div>

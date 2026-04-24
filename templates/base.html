@@ -626,6 +626,77 @@
         let idleSubmitting = false;
         let suppressReloadLock = false;
 
+        function installAutofillGuards() {
+            pageForms.forEach((formEl) => {
+                formEl.setAttribute('autocomplete', 'off');
+                formEl.setAttribute('data-lpignore', 'true');
+                formEl.setAttribute('data-1p-ignore', 'true');
+
+                if (!formEl.querySelector('input[type="password"]') || formEl.dataset.autofillDecoy === 'true') {
+                    return;
+                }
+
+                const decoyWrap = document.createElement('div');
+                decoyWrap.setAttribute('aria-hidden', 'true');
+                decoyWrap.style.position = 'absolute';
+                decoyWrap.style.left = '-9999px';
+                decoyWrap.style.width = '1px';
+                decoyWrap.style.height = '1px';
+                decoyWrap.style.opacity = '0';
+                decoyWrap.style.pointerEvents = 'none';
+
+                const fakeUser = document.createElement('input');
+                fakeUser.type = 'text';
+                fakeUser.name = 'decoy_username';
+                fakeUser.autocomplete = 'username';
+                fakeUser.tabIndex = -1;
+
+                const fakePass = document.createElement('input');
+                fakePass.type = 'password';
+                fakePass.name = 'decoy_password';
+                fakePass.autocomplete = 'current-password';
+                fakePass.tabIndex = -1;
+
+                decoyWrap.append(fakeUser, fakePass);
+                formEl.prepend(decoyWrap);
+                formEl.dataset.autofillDecoy = 'true';
+            });
+
+            const guardedFields = Array.from(document.querySelectorAll(
+                'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="file"]), textarea, select'
+            ));
+
+            guardedFields.forEach((field) => {
+                const isPassword = field instanceof HTMLInputElement && field.type === 'password';
+                field.setAttribute('autocomplete', isPassword ? 'new-password' : 'off');
+                field.setAttribute('autocorrect', 'off');
+                field.setAttribute('autocapitalize', 'none');
+                field.setAttribute('spellcheck', 'false');
+                field.setAttribute('data-lpignore', 'true');
+                field.setAttribute('data-1p-ignore', 'true');
+
+                if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) || field.dataset.autofillGuard === 'true') {
+                    return;
+                }
+
+                field.readOnly = true;
+
+                const unlockField = () => {
+                    field.readOnly = false;
+                    field.dataset.autofillGuard = 'true';
+                    field.removeEventListener('focus', unlockField);
+                    field.removeEventListener('pointerdown', unlockField);
+                    field.removeEventListener('keydown', unlockField);
+                    field.removeEventListener('touchstart', unlockField);
+                };
+
+                field.addEventListener('focus', unlockField);
+                field.addEventListener('pointerdown', unlockField);
+                field.addEventListener('keydown', unlockField);
+                field.addEventListener('touchstart', unlockField, { passive: true });
+            });
+        }
+
         function renderCountdown(value) {
             if (!countdownEl) return;
             const safeValue = Math.max(0, value);
@@ -634,6 +705,8 @@
             const seconds = safeValue % 60;
             countdownEl.textContent = [hours, minutes, seconds].map((item) => String(item).padStart(2, '0')).join(':');
         }
+
+        installAutofillGuards();
 
         if (countdownEl) {
             renderCountdown(remaining);
