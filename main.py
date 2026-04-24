@@ -348,19 +348,8 @@ def build_logs_context(request: Request, session: dict, msg: str | None = None) 
     logs = []
     for event in get_audit_logs(limit=200):
         event_data = dict(event)
-        details = event_data.get("details", {})
-        detail_items = []
-        if isinstance(details, dict):
-            for key, value in details.items():
-                if isinstance(value, (dict, list)):
-                    display_value = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-                elif value is None:
-                    display_value = "-"
-                else:
-                    display_value = str(value)
-                detail_items.append({"key": str(key), "value": display_value})
         event_data["timestamp_label"] = format_audit_timestamp(event_data.get("timestamp"))
-        event_data["detail_items"] = detail_items
+        event_data["details_json"] = json.dumps(event_data.get("details", {}), ensure_ascii=False)
         logs.append(event_data)
 
     context["logs"] = logs
@@ -590,7 +579,6 @@ async def logout(request: Request):
 
 @app.post("/setup")
 async def setup(
-    request: Request,
     master_password: str = Form(...),
     confirm_master_password: str = Form(...),
     checkin_code: str = Form(...),
@@ -608,30 +596,18 @@ async def setup(
         return redirect_with_message(msg)
 
     CryptoManager.init_admin(master_password, checkin_code)
-    log_event(
-        AuditEvent.SYSTEM_RESET,
-        client_ip=client_address(request),
-        details={"action": "initialization"},
-        success=True,
-    )
+    log_event(AuditEvent.SYSTEM_RESET, details={"action": "initialization"}, success=True)
     return redirect_with_message("初始化完成，请登录")
 
 
 @app.post("/reset")
 async def reset(request: Request, csrf_token: str | None = Form(None)):
     status = CryptoManager.get_status()
-    session = None
     if not status["destroyed"]:
-        _, session = require_session(request, csrf_token=csrf_token, admin_only=True, required_mode="vault")
+        require_session(request, csrf_token=csrf_token, admin_only=True, required_mode="vault")
     session_store.clear()
     CryptoManager.reset_system()
-    log_event(
-        AuditEvent.SYSTEM_RESET,
-        user=session["user"] if session else None,
-        client_ip=client_address(request),
-        details={"action": "manual_reset"},
-        success=True,
-    )
+    log_event(AuditEvent.SYSTEM_RESET, details={"action": "manual_reset"}, success=True)
     response = redirect_with_message("系统已重置")
     clear_session_cookie(response)
     return response
@@ -667,7 +643,6 @@ async def manage_user(
     log_event(
         AuditEvent.USER_PASSWORD_UPDATED,
         user=session["user"],
-        client_ip=client_address(request),
         details={"target_user": target_user},
         success=True,
     )
@@ -717,7 +692,6 @@ async def manage_notes_feature(
         log_event(
             AuditEvent.NOTE_FEATURE_UPDATED,
             user=session["user"],
-            client_ip=client_address(request),
             details={"target_user": target_user, "enabled": True},
             success=True,
         )
@@ -728,7 +702,6 @@ async def manage_notes_feature(
     log_event(
         AuditEvent.NOTE_FEATURE_UPDATED,
         user=session["user"],
-        client_ip=client_address(request),
         details={"target_user": target_user, "enabled": False},
         success=True,
     )
@@ -743,7 +716,7 @@ async def update_checkin_code(request: Request, csrf_token: str = Form(...), new
         return redirect_with_message(msg)
 
     CryptoManager.set_checkin_code(new_code)
-    log_event(AuditEvent.CHECKIN_CODE_UPDATED, user=session["user"], client_ip=client_address(request), success=True)
+    log_event(AuditEvent.CHECKIN_CODE_UPDATED, user=session["user"], success=True)
     return redirect_with_message("签到协议更新成功")
 
 
@@ -755,7 +728,7 @@ async def update_duress_code(request: Request, csrf_token: str = Form(...), dure
         return redirect_with_message(msg)
 
     CryptoManager.set_duress_code(duress_code)
-    log_event(AuditEvent.DURESS_CODE_UPDATED, user=session["user"], client_ip=client_address(request), success=True)
+    log_event(AuditEvent.DURESS_CODE_UPDATED, user=session["user"], success=True)
     return redirect_with_message("胁迫销毁协议已激活")
 
 
@@ -775,7 +748,6 @@ async def upload(request: Request, csrf_token: str = Form(...), file: UploadFile
     log_event(
         AuditEvent.FILE_UPLOADED,
         user=session["user"],
-        client_ip=client_address(request),
         details={"filename": safe_name, "size_bytes": len(content)},
         success=True,
     )
@@ -1127,16 +1099,8 @@ async def download_note_attachment(
     note_password: str = Form(...),
 ):
     _, session = require_note_session(request, csrf_token=csrf_token)
-    client_ip = client_address(request)
     note_private_key = verify_note_action_password(session["user"], note_password)
     if note_private_key is None:
-        log_event(
-            AuditEvent.NOTE_ATTACHMENT_DOWNLOADED,
-            user=session["user"],
-            client_ip=client_ip,
-            details={"note_id": note_id, "attachment_id": attachment_id, "status": "invalid_password"},
-            success=False,
-        )
         return redirect_with_message("笔记密码错误", f"/notes?note={note_id}")
     try:
         attachment, content = NotesManager.get_attachment(session["user"], note_id, attachment_id, note_private_key)
@@ -1153,7 +1117,7 @@ async def download_note_attachment(
     log_event(
         AuditEvent.NOTE_ATTACHMENT_DOWNLOADED,
         user=session["user"],
-        client_ip=client_ip,
+        client_ip=client_address(request),
         details={"note_id": note_id, "attachment_id": attachment_id, "filename": attachment["name"]},
         success=True,
     )
@@ -1242,14 +1206,6 @@ async def delete_note_attachment(
 async def http_exception_handler(request: Request, exc: HTTPException):
     target_url = "/"
     detail = exc.detail if isinstance(exc.detail, str) else "请求失败"
-    _, session = get_current_session(request)
-    log_event(
-        AuditEvent.INVALID_REQUEST,
-        user=session.get("user") if session else None,
-        client_ip=client_address(request),
-        details={"method": request.method, "path": request.url.path, "status_code": exc.status_code, "detail": detail},
-        success=False,
-    )
     if request.url.path.startswith("/notes") and detail in {"需要输入笔记密码", "笔记访问失败"}:
         target_url = "/notes"
     return redirect_with_message(detail, target_url)
