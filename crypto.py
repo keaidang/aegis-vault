@@ -1,9 +1,11 @@
+import base64
 import hashlib
 import hmac
 import json
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -28,6 +30,13 @@ DURESS_HASH_PATH = KEY_DIR / "duress.hash"
 SUPPORTED_USERS = ("admin", "user1", "user2", "user3")
 STATUS_LOCK = threading.RLock()
 DESTROY_LOCK = threading.RLock()
+SECRET_HASH_VERSION = "scrypt-v1"
+SECRET_SCRYPT_N = int(os.getenv("SECRET_SCRYPT_N", "32768"))
+SECRET_SCRYPT_R = int(os.getenv("SECRET_SCRYPT_R", "8"))
+SECRET_SCRYPT_P = int(os.getenv("SECRET_SCRYPT_P", "1"))
+SECRET_SCRYPT_DKLEN = 32
+SECRET_SCRYPT_SALT_BYTES = 16
+SECRET_SCRYPT_MAXMEM = int(os.getenv("SECRET_SCRYPT_MAXMEM", str(128 * 1024 * 1024)))
 
 def _load_checkin_timeout_seconds() -> int:
     """读取签到超时时间，优先支持秒级测试配置。"""
@@ -51,9 +60,7 @@ class CryptoManager:
 
     @staticmethod
     def _persist_status_key(key: bytes) -> None:
-        KEY_DIR.mkdir(parents=True, exist_ok=True)
-        with open(CryptoManager._status_key_path(), "wb") as f:
-            f.write(key)
+        CryptoManager._atomic_write(CryptoManager._status_key_path(), key, mode=0o600)
 
     @staticmethod
     def _reset_status_key_cache() -> None:
@@ -111,6 +118,35 @@ class CryptoManager:
     def ensure_dirs():
         KEY_DIR.mkdir(parents=True, exist_ok=True)
         VAULT_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            KEY_DIR.chmod(0o700)
+            VAULT_DIR.chmod(0o700)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _atomic_write(path: Path, data: bytes | str, mode: int = 0o600) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = data.encode("utf-8") if isinstance(data, str) else data
+        tmp_name = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "wb",
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                delete=False,
+            ) as tmp_file:
+                tmp_name = tmp_file.name
+                os.chmod(tmp_name, mode)
+                tmp_file.write(payload)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+            os.replace(tmp_name, path)
+            os.chmod(path, mode)
+        except Exception:
+            if tmp_name:
+                Path(tmp_name).unlink(missing_ok=True)
+            raise
 
     @staticmethod
     def get_user_key_path(username: str):
@@ -184,8 +220,67 @@ class CryptoManager:
         return note_path
 
     @staticmethod
-    def _hash_secret(secret: str) -> bytes:
-        return hashlib.sha256(secret.encode("utf-8")).digest()
+    def _hash_secret(secret: str, salt: bytes | None = None) -> dict:
+        salt = salt or os.urandom(SECRET_SCRYPT_SALT_BYTES)
+        digest = hashlib.scrypt(
+            secret.encode("utf-8"),
+            salt=salt,
+            n=SECRET_SCRYPT_N,
+            r=SECRET_SCRYPT_R,
+            p=SECRET_SCRYPT_P,
+            dklen=SECRET_SCRYPT_DKLEN,
+            maxmem=SECRET_SCRYPT_MAXMEM,
+        )
+        return {
+            "version": SECRET_HASH_VERSION,
+            "kdf": "scrypt",
+            "n": SECRET_SCRYPT_N,
+            "r": SECRET_SCRYPT_R,
+            "p": SECRET_SCRYPT_P,
+            "dklen": SECRET_SCRYPT_DKLEN,
+            "salt": base64.b64encode(salt).decode("ascii"),
+            "hash": base64.b64encode(digest).decode("ascii"),
+        }
+
+    @staticmethod
+    def _encode_secret_hash(secret: str) -> bytes:
+        return json.dumps(
+            CryptoManager._hash_secret(secret),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    @staticmethod
+    def _verify_secret_hash(secret: str, stored: bytes) -> bool:
+        try:
+            record = json.loads(stored.decode("utf-8"))
+            if record.get("version") != SECRET_HASH_VERSION or record.get("kdf") != "scrypt":
+                return False
+            salt = base64.b64decode(record["salt"])
+            expected = base64.b64decode(record["hash"])
+            digest = hashlib.scrypt(
+                secret.encode("utf-8"),
+                salt=salt,
+                n=int(record["n"]),
+                r=int(record["r"]),
+                p=int(record["p"]),
+                dklen=int(record.get("dklen", SECRET_SCRYPT_DKLEN)),
+                maxmem=SECRET_SCRYPT_MAXMEM,
+            )
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+
+        return hmac.compare_digest(digest, expected)
+
+    @staticmethod
+    def _verify_secret_file(path: Path, secret: str) -> bool:
+        if not secret or not path.exists():
+            return False
+        try:
+            stored = path.read_bytes()
+        except OSError:
+            return False
+        return CryptoManager._verify_secret_hash(secret, stored)
 
     @staticmethod
     def init_admin(password: str, checkin_code: str):
@@ -230,38 +325,32 @@ class CryptoManager:
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.BestAvailableEncryption(password.encode())
         )
-        with open(private_key_path, "wb") as f:
-            f.write(pem)
+        CryptoManager._atomic_write(private_key_path, pem, mode=0o600)
         
         public_key = private_key.public_key()
         pub_pem = public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
-        with open(public_key_path, "wb") as f:
-            f.write(pub_pem)
+        CryptoManager._atomic_write(public_key_path, pub_pem, mode=0o644)
 
     @staticmethod
     def set_checkin_code(code: str):
         if not code: return
-        with open(CHECKIN_HASH_PATH, "wb") as f:
-            f.write(CryptoManager._hash_secret(code))
+        CryptoManager._atomic_write(CHECKIN_HASH_PATH, CryptoManager._encode_secret_hash(code), mode=0o600)
 
     @staticmethod
     def set_duress_code(code: str):
         if not code: return
-        with open(DURESS_HASH_PATH, "wb") as f:
-            f.write(CryptoManager._hash_secret(code))
+        CryptoManager._atomic_write(DURESS_HASH_PATH, CryptoManager._encode_secret_hash(code), mode=0o600)
 
     @staticmethod
     def verify_checkin(code: str) -> bool:
-        if not code or not CHECKIN_HASH_PATH.exists(): return False
-        return hmac.compare_digest(CryptoManager._hash_secret(code), open(CHECKIN_HASH_PATH, "rb").read())
+        return CryptoManager._verify_secret_file(CHECKIN_HASH_PATH, code)
 
     @staticmethod
     def verify_duress(code: str) -> bool:
-        if not code or not DURESS_HASH_PATH.exists(): return False
-        return hmac.compare_digest(CryptoManager._hash_secret(code), open(DURESS_HASH_PATH, "rb").read())
+        return CryptoManager._verify_secret_file(DURESS_HASH_PATH, code)
 
     @staticmethod
     def authenticate(password: str):
@@ -388,12 +477,14 @@ class CryptoManager:
         BASE_DIR.mkdir(parents=True, exist_ok=True)
         with STATUS_LOCK:
             status_data = {"last_checkin": int(time.time()), "destroyed": False}
-            with open(STATUS_FILE, "w") as f:
-                json.dump(status_data, f)
+            CryptoManager._atomic_write(
+                STATUS_FILE,
+                json.dumps(status_data, ensure_ascii=False),
+                mode=0o600,
+            )
             # 计算并存储 HMAC
             status_hmac = CryptoManager._compute_status_hmac(status_data)
-            with open(STATUS_HMAC_FILE, "w") as f:
-                f.write(status_hmac)
+            CryptoManager._atomic_write(STATUS_HMAC_FILE, status_hmac, mode=0o600)
 
     @staticmethod
     def get_status():
@@ -473,12 +564,14 @@ class CryptoManager:
             CryptoManager._reset_status_key_cache()
             with STATUS_LOCK:
                 status_data = {"last_checkin": 0, "destroyed": True}
-                with open(STATUS_FILE, "w") as f:
-                    json.dump(status_data, f)
+                CryptoManager._atomic_write(
+                    STATUS_FILE,
+                    json.dumps(status_data, ensure_ascii=False),
+                    mode=0o600,
+                )
                 # 更新 HMAC
                 status_hmac = CryptoManager._compute_status_hmac(status_data)
-                with open(STATUS_HMAC_FILE, "w") as f:
-                    f.write(status_hmac)
+                CryptoManager._atomic_write(STATUS_HMAC_FILE, status_hmac, mode=0o600)
             
             # 这里会由 main.py 中的审计日志记录
             # 避免在 crypto.py 中导入 audit_logger 产生循环依赖
@@ -492,12 +585,14 @@ class CryptoManager:
             CryptoManager._reset_status_key_cache()
             with STATUS_LOCK:
                 status_data = {"last_checkin": 0, "destroyed": False}
-                with open(STATUS_FILE, "w") as f:
-                    json.dump(status_data, f)
+                CryptoManager._atomic_write(
+                    STATUS_FILE,
+                    json.dumps(status_data, ensure_ascii=False),
+                    mode=0o600,
+                )
                 # 重置 HMAC
                 status_hmac = CryptoManager._compute_status_hmac(status_data)
-                with open(STATUS_HMAC_FILE, "w") as f:
-                    f.write(status_hmac)
+                CryptoManager._atomic_write(STATUS_HMAC_FILE, status_hmac, mode=0o600)
             if VAULT_DIR.exists():
                 shutil.rmtree(VAULT_DIR, ignore_errors=True)
             NOTES_CONFIG_FILE.unlink(missing_ok=True)
