@@ -13,6 +13,18 @@ NOTES_LOCK = threading.RLock()
 
 class NotesManager:
     @staticmethod
+    def _entry_timestamps(note_dir: Path) -> tuple[int, int]:
+        encrypted_path = note_dir / "note.aes"
+        try:
+            stat_result = encrypted_path.stat() if encrypted_path.exists() else note_dir.stat()
+            updated_at = int(stat_result.st_mtime)
+            created_at = int(stat_result.st_ctime)
+        except OSError:
+            updated_at = int(time.time())
+            created_at = updated_at
+        return created_at, updated_at
+
+    @staticmethod
     def _normalize_note(note: dict, note_id: str | None = None) -> dict:
         normalized_note = dict(note)
         now = int(time.time())
@@ -103,19 +115,13 @@ class NotesManager:
     def list_note_entries(username: str) -> list[dict]:
         notes_root = CryptoManager.get_notes_root(username)
         entries = []
-        for index, note_dir in enumerate(
-            sorted((path for path in notes_root.iterdir() if path.is_dir()), key=lambda item: item.name, reverse=True),
-            start=1,
-        ):
-            encrypted_path = note_dir / "note.aes"
-            try:
-                stat_result = encrypted_path.stat() if encrypted_path.exists() else note_dir.stat()
-                updated_at = int(stat_result.st_mtime)
-                created_at = int(stat_result.st_ctime)
-            except OSError:
-                updated_at = int(time.time())
-                created_at = updated_at
+        note_dirs = []
+        for note_dir in (path for path in notes_root.iterdir() if path.is_dir()):
+            created_at, updated_at = NotesManager._entry_timestamps(note_dir)
+            note_dirs.append((note_dir, created_at, updated_at))
 
+        note_dirs.sort(key=lambda item: (item[2], item[0].name), reverse=True)
+        for index, (note_dir, created_at, updated_at) in enumerate(note_dirs, start=1):
             entries.append(
                 {
                     "note_id": note_dir.name,

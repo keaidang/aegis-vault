@@ -298,10 +298,11 @@ def build_notes_context(
     selected_note: dict | None = None,
 ) -> dict:
     context = build_common_context(request, msg=msg, current_page="notes", auth_mode="notes")
+    is_create_mode = selected_note_id == "create"
     context["note_entries"] = []
     context["selected_note"] = None
     context["selected_note_id"] = selected_note_id
-    context["note_view_requires_password"] = bool(selected_note_id)
+    context["note_view_requires_password"] = bool(selected_note_id and not is_create_mode)
 
     if not session:
         current_session_id, current_session = get_current_session(request)
@@ -318,16 +319,19 @@ def build_notes_context(
         entry["updated_at_label"] = format_local_timestamp(entry.get("updated_at"))
         note_entries.append(entry)
 
-    active_note = session_store.get_active_note(session_id, selected_note_id) if selected_note_id else None
-    if not selected_note_id:
-        active_note = session_store.get_active_note(session_id)
-        if active_note:
-            selected_note_id = active_note["note_id"]
-            selected_note = active_note["note"]
+    valid_note_ids = {item["note_id"] for item in note_entries}
+    active_note = None
+    if selected_note_id and not is_create_mode:
+        active_note = session_store.get_active_note(session_id, selected_note_id)
 
     if not selected_note_id and note_entries:
         selected_note_id = note_entries[0]["note_id"]
         active_note = session_store.get_active_note(session_id, selected_note_id)
+
+    if selected_note_id not in valid_note_ids and not is_create_mode:
+        selected_note_id = None
+        active_note = None
+        selected_note = None
 
     if selected_note is None and active_note:
         selected_note = active_note["note"]
@@ -335,7 +339,7 @@ def build_notes_context(
     context["note_entries"] = note_entries
     context["selected_note"] = decorate_note(selected_note) if selected_note else None
     context["selected_note_id"] = selected_note_id
-    context["note_view_requires_password"] = bool(selected_note_id and selected_note is None)
+    context["note_view_requires_password"] = bool(selected_note_id and selected_note is None and selected_note_id != "create")
     return context
 
 
