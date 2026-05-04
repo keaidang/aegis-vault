@@ -104,7 +104,6 @@
             flex: 1;
             min-height: 0;
             overflow-y: auto;
-            overflow-x: auto;
             scrollbar-width: thin;
             scrollbar-color: rgba(0, 231, 255, 0.28) transparent;
         }
@@ -428,10 +427,6 @@
             table-layout: fixed;
         }
 
-        .log-table {
-            min-width: 980px;
-        }
-
         .file-name-cell {
             width: 100%;
             min-width: 0;
@@ -488,50 +483,6 @@
             overflow-x: auto;
             white-space: pre-wrap;
             word-break: break-word;
-        }
-
-        .audit-detail-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.45rem;
-            margin: 0;
-            min-width: 0;
-        }
-
-        .audit-detail-item {
-            max-width: min(100%, 320px);
-            min-width: 0;
-            display: grid;
-            grid-template-columns: auto minmax(0, 1fr);
-            align-items: center;
-            gap: 0.45rem;
-            border-radius: 0.7rem;
-            border: 1px solid rgba(0, 231, 255, 0.14);
-            background: rgba(1, 10, 18, 0.66);
-            padding: 0.42rem 0.58rem;
-            font-size: 0.78rem;
-            line-height: 1.35;
-        }
-
-        .audit-detail-item dt {
-            color: rgba(138, 224, 233, 0.78);
-            font-weight: 700;
-            white-space: nowrap;
-        }
-
-        .audit-detail-item dd {
-            min-width: 0;
-            margin: 0;
-            overflow: hidden;
-            color: rgba(220, 252, 255, 0.88);
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .audit-empty-detail {
-            color: rgba(181, 241, 247, 0.45);
-            font-size: 0.82rem;
         }
 
         .footer-meta {
@@ -633,7 +584,7 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body class="{% if duress_active %}danger-mode{% endif %}{% if auth %} auth-body{% endif %}">
-    <main class="shell{% if auth %} auth-shell{% endif %}">
+    <main class="shell pt-12{% if auth %} auth-shell{% endif %}">
         <section class="panel neon-border rounded-[1.4rem] px-4 py-5 md:px-7 md:py-7{% if auth %} auth-frame{% endif %}">
             <div class="flex flex-col gap-4 border-b border-cyan-900/60 pb-5 md:flex-row md:items-end md:justify-between">
                 <div class="space-y-2">

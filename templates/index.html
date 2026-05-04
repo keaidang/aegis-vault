@@ -181,17 +181,14 @@
                                     <span class="file-name-text" title="{{ file }}">{{ file }}</span>
                                 </div>
                             </div>
-                            <form action="/download" method="post" class="download-form">
+                            <form method="post" class="download-form">
                                 <input type="hidden" name="filename" value="{{ file }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <input type="text" data-secret-name="password" required autocomplete="off" placeholder="输入访问密码后下载" class="download-password-field secure-entry">
-                                <button type="submit" class="btn-neon w-full">解密下载</button>
-                            </form>
-                            <form action="/delete_file" method="post" class="stack-form">
-                                <input type="hidden" name="filename" value="{{ file }}">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                <input type="text" data-secret-name="password" required autocomplete="off" placeholder="输入访问密码后删除" class="download-password-field secure-entry">
-                                <button type="submit" class="btn-danger w-full" onclick="return window.confirm('确认删除当前文件？');">删除文件</button>
+                                <input type="text" data-secret-name="password" required autocomplete="off" placeholder="输入访问密码" class="download-password-field secure-entry w-full">
+                                <div class="flex gap-2">
+                                    <button type="submit" formaction="/download" class="btn-neon flex-1">解密下载</button>
+                                    <button type="submit" formaction="/delete_file" class="btn-danger flex-1" onclick="return window.confirm('确认删除当前文件？');">删除</button>
+                                </div>
                             </form>
                         </div>
                     </article>
@@ -201,7 +198,7 @@
                 <table class="desktop-table files-table mt-2 w-full text-left text-sm">
                     <colgroup>
                         <col>
-                        <col style="width: 420px;">
+                        <col style="width: 440px;">
                     </colgroup>
                     <thead>
                         <tr class="border-b border-cyan-900/70 text-cyan-600">
@@ -216,20 +213,13 @@
                                 <span class="file-name-text" title="{{ file }}">{{ file }}</span>
                             </td>
                             <td class="py-4 text-right">
-                                <div class="inline-actions justify-end">
-                                    <form action="/download" method="post" class="download-inline-form">
-                                        <input type="hidden" name="filename" value="{{ file }}">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <input type="text" data-secret-name="password" required autocomplete="off" placeholder="访问密码" class="download-password-field secure-entry">
-                                        <button type="submit" class="btn-neon px-4 py-2">解密下载</button>
-                                    </form>
-                                    <form action="/delete_file" method="post" class="download-inline-form">
-                                        <input type="hidden" name="filename" value="{{ file }}">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <input type="text" data-secret-name="password" required autocomplete="off" placeholder="访问密码" class="download-password-field secure-entry">
-                                        <button type="submit" class="btn-danger px-4 py-2" onclick="return window.confirm('确认删除当前文件？');">删除</button>
-                                    </form>
-                                </div>
+                                <form method="post" class="inline-actions justify-end">
+                                    <input type="hidden" name="filename" value="{{ file }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="text" data-secret-name="password" required autocomplete="off" placeholder="访问密码" class="download-password-field secure-entry">
+                                    <button type="submit" formaction="/download" class="btn-neon px-4 py-2">解密下载</button>
+                                    <button type="submit" formaction="/delete_file" class="btn-danger px-4 py-2" onclick="return window.confirm('确认删除当前文件？');">删除</button>
+                                </form>
                             </td>
                         </tr>
                         {% endfor %}
