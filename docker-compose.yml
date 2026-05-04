@@ -9,5 +9,14 @@ services:
       - ./data:/app/data
     environment:
       - AEGIS_DATA_DIR=/app/data
+      - AUDIT_LOG_DIR=/app/data
+      - STATIC_DIR=/app/static
       - CHECKIN_TIMEOUT=72
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     restart: unless-stopped

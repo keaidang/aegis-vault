@@ -37,6 +37,7 @@ SECRET_SCRYPT_P = int(os.getenv("SECRET_SCRYPT_P", "1"))
 SECRET_SCRYPT_DKLEN = 32
 SECRET_SCRYPT_SALT_BYTES = 16
 SECRET_SCRYPT_MAXMEM = int(os.getenv("SECRET_SCRYPT_MAXMEM", str(128 * 1024 * 1024)))
+PRIVATE_KEY_FORMAT_VERSION = "aegis-key-v2"
 
 def _load_checkin_timeout_seconds() -> int:
     """读取签到超时时间，优先支持秒级测试配置。"""
@@ -180,6 +181,21 @@ class CryptoManager:
         return list(SUPPORTED_USERS)
 
     @staticmethod
+    def private_key_is_current_format(key_path: Path) -> bool:
+        if not key_path.exists():
+            return False
+        try:
+            record = json.loads(key_path.read_text("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return False
+        return record.get("version") == PRIVATE_KEY_FORMAT_VERSION
+
+    @staticmethod
+    def requires_reinitialization() -> bool:
+        admin_key = KEY_DIR / "admin.key"
+        return admin_key.exists() and not CryptoManager.private_key_is_current_format(admin_key)
+
+    @staticmethod
     def validate_username(username: str):
         if username not in SUPPORTED_USERS:
             raise ValueError("不支持的用户")
@@ -283,6 +299,80 @@ class CryptoManager:
         return CryptoManager._verify_secret_hash(secret, stored)
 
     @staticmethod
+    def _derive_password_key(password: str, salt: bytes, n: int, r: int, p: int, dklen: int) -> bytes:
+        return hashlib.scrypt(
+            password.encode("utf-8"),
+            salt=salt,
+            n=n,
+            r=r,
+            p=p,
+            dklen=dklen,
+            maxmem=SECRET_SCRYPT_MAXMEM,
+        )
+
+    @staticmethod
+    def _encrypt_private_key_pem(private_key, password: str) -> bytes:
+        plain_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        salt = os.urandom(SECRET_SCRYPT_SALT_BYTES)
+        nonce = os.urandom(16)
+        key = CryptoManager._derive_password_key(
+            password,
+            salt=salt,
+            n=SECRET_SCRYPT_N,
+            r=SECRET_SCRYPT_R,
+            p=SECRET_SCRYPT_P,
+            dklen=SECRET_SCRYPT_DKLEN,
+        )
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        ciphertext, tag = cipher.encrypt_and_digest(plain_pem)
+        record = {
+            "version": PRIVATE_KEY_FORMAT_VERSION,
+            "kdf": "scrypt",
+            "cipher": "AES-256-GCM",
+            "n": SECRET_SCRYPT_N,
+            "r": SECRET_SCRYPT_R,
+            "p": SECRET_SCRYPT_P,
+            "dklen": SECRET_SCRYPT_DKLEN,
+            "salt": base64.b64encode(salt).decode("ascii"),
+            "nonce": base64.b64encode(nonce).decode("ascii"),
+            "tag": base64.b64encode(tag).decode("ascii"),
+            "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
+        }
+        return json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    @staticmethod
+    def _decrypt_private_key_record(data: bytes, password: str):
+        try:
+            record = json.loads(data.decode("utf-8"))
+            if record.get("version") != PRIVATE_KEY_FORMAT_VERSION:
+                raise ValueError("unsupported_key_format")
+            salt = base64.b64decode(record["salt"])
+            nonce = base64.b64decode(record["nonce"])
+            tag = base64.b64decode(record["tag"])
+            ciphertext = base64.b64decode(record["ciphertext"])
+            key = CryptoManager._derive_password_key(
+                password,
+                salt=salt,
+                n=int(record["n"]),
+                r=int(record["r"]),
+                p=int(record["p"]),
+                dklen=int(record.get("dklen", SECRET_SCRYPT_DKLEN)),
+            )
+            cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+            plain_pem = cipher.decrypt_and_verify(ciphertext, tag)
+            return serialization.load_pem_private_key(
+                plain_pem,
+                password=None,
+                backend=default_backend(),
+            )
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            raise ValueError("invalid_private_key_password")
+
+    @staticmethod
     def init_admin(password: str, checkin_code: str):
         if KEY_DIR.exists():
             shutil.rmtree(KEY_DIR)
@@ -320,11 +410,7 @@ class CryptoManager:
         CryptoManager.validate_username(username)
         CryptoManager.ensure_dirs()
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=4096, backend=default_backend())
-        pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.BestAvailableEncryption(password.encode())
-        )
+        pem = CryptoManager._encrypt_private_key_pem(private_key, password)
         CryptoManager._atomic_write(private_key_path, pem, mode=0o600)
         
         public_key = private_key.public_key()
@@ -365,14 +451,10 @@ class CryptoManager:
             key_path = CryptoManager.get_user_key_path(user)
             if key_path.exists():
                 try:
-                    with open(key_path, "rb") as f:
-                        serialization.load_pem_private_key(
-                            f.read(),
-                            password=password.encode(),
-                            backend=default_backend(),
-                        )
+                    CryptoManager._load_private_key(key_path, password)
                     return {"user": user}
-                except: continue
+                except ValueError:
+                    continue
         return None
 
     @staticmethod
@@ -390,11 +472,7 @@ class CryptoManager:
         if not key_path.exists():
             return None
         with open(key_path, "rb") as f:
-            return serialization.load_pem_private_key(
-                f.read(),
-                password=password.encode(),
-                backend=default_backend(),
-            )
+            return CryptoManager._decrypt_private_key_record(f.read(), password)
 
     @staticmethod
     def encrypt_file(file_content: bytes, filename: str, username: str):

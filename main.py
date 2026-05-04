@@ -1,8 +1,8 @@
 import os
-import tempfile
 import threading
 import time
 import json
+from ipaddress import ip_address, ip_network
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, unquote
@@ -11,9 +11,9 @@ from zoneinfo import ZoneInfo
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.background import BackgroundTask
 
 from audit_logger import AuditEvent, get_audit_logs, log_event, verify_audit_chain
 from crypto import CHECKIN_TIMEOUT, KEY_DIR, VAULT_DIR, CryptoManager
@@ -26,6 +26,7 @@ load_dotenv()
 app = FastAPI()
 
 TEMPLATE_DIR = os.getenv("TEMPLATE_DIR", "./templates")
+STATIC_DIR = os.getenv("STATIC_DIR", "./static")
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_HOURS", 12)) * 3600
 MAX_VAULT_SIZE_BYTES = int(os.getenv("MAX_VAULT_SIZE_MB", 1024)) * 1024 * 1024
 MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", 64)) * 1024 * 1024
@@ -34,7 +35,13 @@ SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "
 MONITOR_INTERVAL_SECONDS = int(os.getenv("MONITOR_INTERVAL_SECONDS", "5"))
 FLASH_COOKIE_NAME = "aegis_flash"
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+TRUSTED_PROXY_IPS = [
+    item.strip()
+    for item in os.getenv("TRUSTED_PROXY_IPS", "127.0.0.1,::1").split(",")
+    if item.strip()
+]
 
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 session_store = SessionStore(ttl_seconds=SESSION_TTL_SECONDS)
 rate_limiter = RateLimiter(max_attempts=5, window_seconds=600, lockout_seconds=900)
@@ -84,7 +91,31 @@ def render_page(request: Request, template_name: str, context: dict) -> HTMLResp
 
 
 def client_address(request: Request) -> str:
-    return request.client.host if request.client and request.client.host else "unknown"
+    direct_host = request.client.host if request.client and request.client.host else "unknown"
+    try:
+        direct_ip = ip_address(direct_host)
+        trusted = any(direct_ip in ip_network(proxy, strict=False) for proxy in TRUSTED_PROXY_IPS)
+    except ValueError:
+        trusted = False
+    if trusted:
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        forwarded_host = forwarded_for.split(",", 1)[0].strip()
+        if forwarded_host:
+            try:
+                return str(ip_address(forwarded_host))
+            except ValueError:
+                pass
+    return direct_host
+
+
+def download_bytes_response(content: bytes, filename: str) -> StreamingResponse:
+    quoted_name = quote(filename)
+    headers = {
+        "Cache-Control": "no-store",
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quoted_name}",
+        "Content-Length": str(len(content)),
+    }
+    return StreamingResponse(iter([content]), media_type="application/octet-stream", headers=headers)
 
 
 def get_vault_size() -> int:
@@ -211,6 +242,7 @@ def build_common_context(
 ) -> dict:
     status = CryptoManager.get_status()
     exists = (KEY_DIR / "admin.key").exists()
+    reinit_required = CryptoManager.requires_reinitialization()
     remaining_seconds = 0
 
     if status.get("_tampered"):
@@ -220,7 +252,7 @@ def build_common_context(
         msg = "检测到状态文件篡改，系统已自毁"
         status = CryptoManager.get_status()
 
-    if exists and not status["destroyed"]:
+    if exists and not status["destroyed"] and not reinit_required:
         elapsed = int(time.time()) - status["last_checkin"]
         remaining_seconds = max(0, CHECKIN_TIMEOUT - elapsed)
 
@@ -243,6 +275,7 @@ def build_common_context(
         and session
         and exists
         and not status["destroyed"]
+        and not reinit_required
         and session_key_exists
         and (auth_mode is None or session_mode == auth_mode)
     ):
@@ -260,6 +293,7 @@ def build_common_context(
 
     return {
         "exists": exists,
+        "reinit_required": reinit_required,
         "destroyed": status["destroyed"],
         "remaining_total_s": remaining_seconds,
         "auth": auth,
@@ -348,8 +382,19 @@ def build_logs_context(request: Request, session: dict, msg: str | None = None) 
     logs = []
     for event in get_audit_logs(limit=200):
         event_data = dict(event)
+        details = event_data.get("details", {})
+        detail_items = []
+        if isinstance(details, dict):
+            for key, value in details.items():
+                if isinstance(value, (dict, list)):
+                    display_value = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+                elif value is None:
+                    display_value = "-"
+                else:
+                    display_value = str(value)
+                detail_items.append({"key": str(key), "value": display_value})
         event_data["timestamp_label"] = format_audit_timestamp(event_data.get("timestamp"))
-        event_data["details_json"] = json.dumps(event_data.get("details", {}), ensure_ascii=False)
+        event_data["detail_items"] = detail_items
         logs.append(event_data)
 
     context["logs"] = logs
@@ -374,10 +419,6 @@ def read_upload_bytes(upload: UploadFile, max_size: int) -> bytes:
     finally:
         upload.file.close()
     return b"".join(chunks)
-
-
-def remove_file(path: str) -> None:
-    Path(path).unlink(missing_ok=True)
 
 
 def validate_password_strength(password: str, min_length: int = 12) -> tuple[bool, str]:
@@ -414,7 +455,7 @@ def monitor_switch() -> None:
     CryptoManager.ensure_dirs()
     while True:
         status = CryptoManager.get_status()
-        if not status["destroyed"] and (KEY_DIR / "admin.key").exists():
+        if not status["destroyed"] and (KEY_DIR / "admin.key").exists() and not CryptoManager.requires_reinitialization():
             if status.get("_tampered"):
                 CryptoManager.destroy_all()
                 log_event(AuditEvent.SYSTEM_DESTROYED, details={"reason": "status_file_tampered"}, success=True)
@@ -446,7 +487,7 @@ async def security_headers(request: Request, call_next):
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com data:; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
         "img-src 'self' data:; "
         "base-uri 'self'; "
         "form-action 'self'; "
@@ -579,6 +620,7 @@ async def logout(request: Request):
 
 @app.post("/setup")
 async def setup(
+    request: Request,
     master_password: str = Form(...),
     confirm_master_password: str = Form(...),
     checkin_code: str = Form(...),
@@ -596,18 +638,30 @@ async def setup(
         return redirect_with_message(msg)
 
     CryptoManager.init_admin(master_password, checkin_code)
-    log_event(AuditEvent.SYSTEM_RESET, details={"action": "initialization"}, success=True)
+    log_event(
+        AuditEvent.SYSTEM_RESET,
+        client_ip=client_address(request),
+        details={"action": "initialization"},
+        success=True,
+    )
     return redirect_with_message("初始化完成，请登录")
 
 
 @app.post("/reset")
 async def reset(request: Request, csrf_token: str | None = Form(None)):
     status = CryptoManager.get_status()
-    if not status["destroyed"]:
-        require_session(request, csrf_token=csrf_token, admin_only=True, required_mode="vault")
+    session = None
+    if not status["destroyed"] and not CryptoManager.requires_reinitialization():
+        _, session = require_session(request, csrf_token=csrf_token, admin_only=True, required_mode="vault")
     session_store.clear()
     CryptoManager.reset_system()
-    log_event(AuditEvent.SYSTEM_RESET, details={"action": "manual_reset"}, success=True)
+    log_event(
+        AuditEvent.SYSTEM_RESET,
+        user=session["user"] if session else None,
+        client_ip=client_address(request),
+        details={"action": "manual_reset"},
+        success=True,
+    )
     response = redirect_with_message("系统已重置")
     clear_session_cookie(response)
     return response
@@ -643,6 +697,7 @@ async def manage_user(
     log_event(
         AuditEvent.USER_PASSWORD_UPDATED,
         user=session["user"],
+        client_ip=client_address(request),
         details={"target_user": target_user},
         success=True,
     )
@@ -692,6 +747,7 @@ async def manage_notes_feature(
         log_event(
             AuditEvent.NOTE_FEATURE_UPDATED,
             user=session["user"],
+            client_ip=client_address(request),
             details={"target_user": target_user, "enabled": True},
             success=True,
         )
@@ -702,6 +758,7 @@ async def manage_notes_feature(
     log_event(
         AuditEvent.NOTE_FEATURE_UPDATED,
         user=session["user"],
+        client_ip=client_address(request),
         details={"target_user": target_user, "enabled": False},
         success=True,
     )
@@ -716,7 +773,7 @@ async def update_checkin_code(request: Request, csrf_token: str = Form(...), new
         return redirect_with_message(msg)
 
     CryptoManager.set_checkin_code(new_code)
-    log_event(AuditEvent.CHECKIN_CODE_UPDATED, user=session["user"], success=True)
+    log_event(AuditEvent.CHECKIN_CODE_UPDATED, user=session["user"], client_ip=client_address(request), success=True)
     return redirect_with_message("签到协议更新成功")
 
 
@@ -728,7 +785,7 @@ async def update_duress_code(request: Request, csrf_token: str = Form(...), dure
         return redirect_with_message(msg)
 
     CryptoManager.set_duress_code(duress_code)
-    log_event(AuditEvent.DURESS_CODE_UPDATED, user=session["user"], success=True)
+    log_event(AuditEvent.DURESS_CODE_UPDATED, user=session["user"], client_ip=client_address(request), success=True)
     return redirect_with_message("胁迫销毁协议已激活")
 
 
@@ -748,6 +805,7 @@ async def upload(request: Request, csrf_token: str = Form(...), file: UploadFile
     log_event(
         AuditEvent.FILE_UPLOADED,
         user=session["user"],
+        client_ip=client_address(request),
         details={"filename": safe_name, "size_bytes": len(content)},
         success=True,
     )
@@ -875,12 +933,6 @@ async def download(
 
     rate_limiter.reset("download", scope_key)
     download_name = safe_name[:-4] if safe_name.endswith(".aes") else safe_name
-    temp_dir = Path("/tmp/aegis")
-    temp_dir.mkdir(exist_ok=True)
-    fd, temp_path = tempfile.mkstemp(prefix="aegis-", suffix=f"-{download_name}", dir=temp_dir)
-    with os.fdopen(fd, "wb") as temp_file:
-        temp_file.write(decrypted_content)
-
     log_event(
         AuditEvent.FILE_DOWNLOADED,
         user=session["user"],
@@ -888,12 +940,7 @@ async def download(
         details={"filename": safe_name, "size_bytes": len(decrypted_content)},
         success=True,
     )
-    return FileResponse(
-        temp_path,
-        filename=download_name,
-        background=BackgroundTask(remove_file, temp_path),
-        headers={"Cache-Control": "no-store"},
-    )
+    return download_bytes_response(decrypted_content, download_name)
 
 
 @app.post("/notes/view")
@@ -1099,34 +1146,30 @@ async def download_note_attachment(
     note_password: str = Form(...),
 ):
     _, session = require_note_session(request, csrf_token=csrf_token)
+    client_ip = client_address(request)
     note_private_key = verify_note_action_password(session["user"], note_password)
     if note_private_key is None:
+        log_event(
+            AuditEvent.NOTE_ATTACHMENT_DOWNLOADED,
+            user=session["user"],
+            client_ip=client_ip,
+            details={"note_id": note_id, "attachment_id": attachment_id, "status": "invalid_password"},
+            success=False,
+        )
         return redirect_with_message("笔记密码错误", f"/notes?note={note_id}")
     try:
         attachment, content = NotesManager.get_attachment(session["user"], note_id, attachment_id, note_private_key)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="附件不存在") from exc
 
-    temp_dir = Path("/tmp/aegis")
-    temp_dir.mkdir(exist_ok=True)
-    suffix = f"-{attachment['name']}"
-    fd, temp_path = tempfile.mkstemp(prefix="aegis-note-", suffix=suffix, dir=temp_dir)
-    with os.fdopen(fd, "wb") as temp_file:
-        temp_file.write(content)
-
     log_event(
         AuditEvent.NOTE_ATTACHMENT_DOWNLOADED,
         user=session["user"],
-        client_ip=client_address(request),
+        client_ip=client_ip,
         details={"note_id": note_id, "attachment_id": attachment_id, "filename": attachment["name"]},
         success=True,
     )
-    return FileResponse(
-        temp_path,
-        filename=attachment["name"],
-        background=BackgroundTask(remove_file, temp_path),
-        headers={"Cache-Control": "no-store"},
-    )
+    return download_bytes_response(content, attachment["name"])
 
 
 @app.post("/notes/attachment/delete")
@@ -1206,6 +1249,14 @@ async def delete_note_attachment(
 async def http_exception_handler(request: Request, exc: HTTPException):
     target_url = "/"
     detail = exc.detail if isinstance(exc.detail, str) else "请求失败"
+    _, session = get_current_session(request)
+    log_event(
+        AuditEvent.INVALID_REQUEST,
+        user=session.get("user") if session else None,
+        client_ip=client_address(request),
+        details={"method": request.method, "path": request.url.path, "status_code": exc.status_code, "detail": detail},
+        success=False,
+    )
     if request.url.path.startswith("/notes") and detail in {"需要输入笔记密码", "笔记访问失败"}:
         target_url = "/notes"
     return redirect_with_message(detail, target_url)

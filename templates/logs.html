@@ -56,20 +56,31 @@
                                 <span class="status-pill {% if not log.success %}border-red-500/30 bg-red-500/10 text-red-300{% endif %}">{{ "SUCCESS" if log.success else "FAILED" }}</span>
                             </div>
                             <div class="text-sm leading-7 text-cyan-100/75">用户：{{ log.user }}<br>来源：{{ log.client_ip }}</div>
-                            <div class="code-blockish">{{ log.details_json }}</div>
+                            {% if log.detail_items %}
+                            <dl class="audit-detail-list">
+                                {% for item in log.detail_items %}
+                                <div class="audit-detail-item">
+                                    <dt>{{ item.key }}</dt>
+                                    <dd title="{{ item.value }}">{{ item.value }}</dd>
+                                </div>
+                                {% endfor %}
+                            </dl>
+                            {% else %}
+                            <span class="audit-empty-detail">无详情</span>
+                            {% endif %}
                         </div>
                     </article>
                     {% endfor %}
                 </div>
 
-                <table class="desktop-table log-table mt-2 w-full text-left text-sm">
-                    <colgroup>
-                        <col style="width: 210px;">
-                        <col style="width: 190px;">
-                        <col style="width: 110px;">
-                        <col style="width: 120px;">
-                        <col>
-                    </colgroup>
+	                <table class="desktop-table log-table mt-2 w-full text-left text-sm">
+	                    <colgroup>
+	                        <col style="width: 180px;">
+	                        <col style="width: 180px;">
+	                        <col style="width: 90px;">
+	                        <col style="width: 115px;">
+	                        <col>
+	                    </colgroup>
                     <thead>
                         <tr class="border-b border-cyan-900/70 text-cyan-600">
                             <th class="pb-3 font-medium">时间</th>
@@ -86,8 +97,21 @@
                             <td class="py-4 pr-4 text-cyan-100/85">{{ log.event_type }}</td>
                             <td class="py-4 pr-4 text-cyan-100/85">{{ log.user }}</td>
                             <td class="py-4 pr-4"><span class="status-pill {% if not log.success %}border-red-500/30 bg-red-500/10 text-red-300{% endif %}">{{ "SUCCESS" if log.success else "FAILED" }}</span></td>
-                            <td class="py-4 text-cyan-100/75"><div class="code-blockish">{{ log.details_json }}</div></td>
-                        </tr>
+	                            <td class="py-4 text-cyan-100/75">
+                                    {% if log.detail_items %}
+                                    <dl class="audit-detail-list">
+                                        {% for item in log.detail_items %}
+                                        <div class="audit-detail-item">
+                                            <dt>{{ item.key }}</dt>
+                                            <dd title="{{ item.value }}">{{ item.value }}</dd>
+                                        </div>
+                                        {% endfor %}
+                                    </dl>
+                                    {% else %}
+                                    <span class="audit-empty-detail">无详情</span>
+                                    {% endif %}
+                                </td>
+	                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>

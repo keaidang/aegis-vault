@@ -57,6 +57,7 @@ Aegis Vault 试图处理的就是这些高压场景。它提供：
 - 支持签到重置倒计时
 - 支持设置和更新胁迫销毁码
 - 签到码与胁迫码使用带随机 salt 的 `scrypt` 慢哈希保存
+- 下载文件与笔记附件时使用内存流式响应，不再落盘创建明文临时文件
 - 支持密钥与密文的安全删除 / 物理粉碎
 - 支持移动端与桌面端自适应界面
 
@@ -65,6 +66,7 @@ Aegis Vault 试图处理的就是这些高压场景。它提供：
 - `HttpOnly` 会话 Cookie
 - CSRF Token 防护
 - 登录 / 签到失败限流
+- 会话与限流状态持久化到 SQLite
 - 会话绑定客户端特征（IP + User-Agent 指纹）
 - 笔记查看 / 删除 / 附件删除的失败限流与审计
 - `status.json` 的 HMAC-SHA256 完整性保护
@@ -74,6 +76,7 @@ Aegis Vault 试图处理的就是这些高压场景。它提供：
 - 文件名规范化与路径穿越防护
 - 笔记模式与保险库模式分离，界面不互相暴露直达入口
 - 下载后的临时明文文件自动清理
+- 前端静态 CSS 本地化，不再依赖 Tailwind CDN
 - 管理员重置接口鉴权
 - 已有加密文件时禁止直接重建该用户密钥
 - 已有笔记时禁止直接重置该用户笔记密钥
@@ -145,7 +148,7 @@ data/
 - 每个上传文件单独生成一把随机 **AES-256** 文件密钥
 - 文件内容使用 **AES-GCM** 加密，提供机密性和完整性校验
 - 文件密钥使用对应用户的公钥通过 **RSA-OAEP(SHA-256)** 封装
-- 用户私钥使用用户密码加密后落盘保存
+- 用户私钥使用项目自定义 `aegis-key-v2` 格式保存：`scrypt` 从用户密码派生 AES-256 密钥，再用 AES-256-GCM 加密私钥
 
 这意味着：
 
@@ -159,7 +162,7 @@ data/
 
 - 登录成功后，服务端生成随机 `session_id`
 - 浏览器仅持有 `HttpOnly` Cookie
-- 会话存储在进程内内存
+- 会话存储在本地 SQLite 状态库
 - 会话带有明确模式：`vault` 或 `notes`
 - 会话中包含：
   - 当前用户身份
@@ -172,9 +175,9 @@ data/
 
 需要注意：
 
-- 这是**进程内会话**，不是 Redis 或数据库会话
-- 服务重启后所有会话会失效
-- 不适合多实例横向扩展
+- 默认使用本地 SQLite，不需要额外 Redis 服务
+- 服务重启后会话与限流状态可保留到 TTL 过期
+- 不适合多个容器同时写同一个状态库的大规模横向扩展
 - `SESSION_TTL_HOURS` 控制服务端会话总时长，前端 60 秒空闲登出是额外的一层交互保护
 
 ### 3. 多用户模型
@@ -308,6 +311,8 @@ data/
 - 签到码 / 胁迫码使用 `scrypt` 慢哈希保存
 - 每次设置签到码 / 胁迫码都会生成独立随机 salt
 - 旧版裸 `SHA-256` 签到码 / 胁迫码 hash 不再兼容
+- 管理员 / 用户 / 笔记私钥使用 `scrypt + AES-256-GCM` 保护
+- 旧版 PEM 加密私钥不再兼容，升级后需要重新初始化或重新生成密钥
 - 敏感文件通过原子写入降低半写和损坏风险
 - 私钥、状态密钥、状态文件、HMAC 与口令 hash 默认使用 `0600` 权限
 - `keys/` 与 `vault/` 目录默认收紧为 `0700`
@@ -331,7 +336,7 @@ data/
 - 会话内不缓存已解锁私钥
 - 每次下载都要求重新输入访问密码
 - 下载时才临时加载私钥并解密
-- 下载后的明文临时文件在响应结束后删除
+- 下载内容通过内存流式响应返回，不再写入 `/tmp/aegis` 明文临时文件
 - 笔记查看、删除、附件下载、附件删除同样要求重新输入笔记密码
 
 ### 基础安全策略
@@ -387,7 +392,7 @@ data/
 
 - FastAPI
 - Jinja2
-- TailwindCSS CDN
+- 本地 CSS 工具类与原生样式
 - 少量原生 JavaScript
 
 ---
@@ -505,6 +510,7 @@ nano .env
 PORT=46746
 AEGIS_DATA_DIR=./data
 TEMPLATE_DIR=./templates
+STATIC_DIR=./static
 CHECKIN_TIMEOUT=72
 SESSION_TTL_HOURS=12
 SESSION_COOKIE_NAME=aegis_session
@@ -512,6 +518,8 @@ SESSION_COOKIE_SECURE=false
 MAX_VAULT_SIZE_MB=1024
 MAX_UPLOAD_SIZE_MB=64
 AUDIT_LOG_DIR=./data
+AEGIS_STATE_DB=./data/runtime_state.sqlite3
+TRUSTED_PROXY_IPS=127.0.0.1,::1
 ```
 
 如果你后面会挂 Nginx / Caddy 并启用 HTTPS，建议改成：
@@ -639,6 +647,7 @@ sudo ufw reload
 | `PORT` | `46746` | Web 服务监听端口 |
 | `AEGIS_DATA_DIR` | `./data` | 密钥、密文、状态、审计日志的存储目录 |
 | `TEMPLATE_DIR` | `./templates` | HTML 模板目录 |
+| `STATIC_DIR` | `./static` | 本地静态资源目录 |
 | `CHECKIN_TIMEOUT` | `72` | 签到超时时间，单位小时 |
 | `CHECKIN_TIMEOUT_SECONDS` | 未设置 | 仅测试用途，秒级覆盖 `CHECKIN_TIMEOUT` |
 | `MONITOR_INTERVAL_SECONDS` | `5` | 后台状态监测与销毁检查轮询间隔，单位秒 |
@@ -648,6 +657,8 @@ sudo ufw reload
 | `MAX_VAULT_SIZE_MB` | `1024` | 整个保险库总容量上限 |
 | `MAX_UPLOAD_SIZE_MB` | `64` | 单文件上传大小上限 |
 | `AUDIT_LOG_DIR` | `./data` | 审计日志与链式哈希存储目录 |
+| `AEGIS_STATE_DB` | `./data/runtime_state.sqlite3` | SQLite 会话与限流状态库路径 |
+| `TRUSTED_PROXY_IPS` | `127.0.0.1,::1` | 允许解析 `X-Forwarded-For` 的可信代理来源 |
 | `SECRET_SCRYPT_N` | `32768` | 签到码 / 胁迫码慢哈希 CPU 成本参数 |
 | `SECRET_SCRYPT_R` | `8` | 签到码 / 胁迫码慢哈希块大小参数 |
 | `SECRET_SCRYPT_P` | `1` | 签到码 / 胁迫码慢哈希并行参数 |
@@ -764,21 +775,40 @@ sudo ufw reload
 
 - 用户模型是固定槽位，不支持动态注册
 - 登录识别方式仍是“尝试用口令解锁现有私钥”
-- 管理员 / 用户 / 笔记密码仍由加密私钥校验，不是独立的慢哈希登录记录
-- 会话保存在单进程内存，不适合多实例部署
-- 没有数据库、对象存储、消息队列等外部依赖
+- 管理员 / 用户 / 笔记密码仍由加密私钥校验，不是单独的用户表认证系统
+- 会话和限流使用本地 SQLite，不适合多实例同时写同一个状态库
+- 没有外部数据库、对象存储、消息队列等依赖
 - 没有文件分享、版本控制、审批流和细粒度 ACL
-- 下载过程仍需在服务端短暂创建明文临时文件
 - 神盾笔记当前不支持全文检索、标签、协作编辑、历史版本恢复
 - 笔记附件当前仅支持图片文件
 - 前端 60 秒空闲登出当前为固定值，尚未配置化
-- 升级到 `scrypt-v1` 后，旧版 `checkin.hash` / `duress.hash` 需要重新设置
+- 升级到 `aegis-key-v2` 与 `scrypt-v1` 后，旧版私钥和旧版 `checkin.hash` / `duress.hash` 需要重新初始化或重新设置
 - `shred` 在 SSD、快照盘、日志结构文件系统、CoW 文件系统上不能视为绝对可靠
 - 离线磁盘防护仍然依赖操作系统级全磁盘加密
 
 ---
 
 ## 📝 本次更新记录
+
+### v1.4.0 - 2026-04-25
+
+这次版本一次性完成第二轮安全迭代，覆盖私钥保护、下载明文落盘、前端 CDN、会话限流持久化、审计日志格式、可信代理、容器运行权限和测试覆盖。
+
+#### 安全与架构升级
+
+- 管理员、用户、笔记私钥切换为 `aegis-key-v2`：`scrypt` 派生密钥，AES-256-GCM 加密私钥
+- 旧版 PEM 加密私钥不再兼容，检测到旧格式时首页会提示重新初始化
+- 文件下载与笔记附件下载改为内存流式响应，不再写入 `/tmp/aegis` 明文临时文件
+- 审计日志改为 JSONL 原生格式，并保留旧 logging 格式解析兼容
+- 会话与限流状态改为 SQLite 持久化，服务重启后可保留到 TTL / lockout 过期
+- 新增 `TRUSTED_PROXY_IPS`，仅信任指定代理来源传入的 `X-Forwarded-For`
+- 前端移除 Tailwind CDN，改用本地 `static/aegis-local.css`
+- Docker 改为非 root 用户运行，并加入 `cap_drop`、`no-new-privileges`、`tmpfs /tmp`
+
+#### 验证与测试
+
+- 新增私钥格式、加解密流程、SQLite 会话、SQLite 限流、JSONL 审计解析测试
+- 当前测试覆盖慢哈希、私钥格式、文件加解密、审计解析、会话持久化、限流持久化
 
 ### v1.3.0 - 2026-04-25
 
