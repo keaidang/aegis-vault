@@ -15,6 +15,11 @@
 
 ---
 
+## 项目界面图片
+
+<img width="5952" height="1186" alt="image" src="https://github.com/user-attachments/assets/c536429d-4871-4098-b38d-f104ac903d2e" />
+
+
 ## 📖 项目定位
 
 传统加密存储默认的前提通常是“只要密码没泄露，数据就是安全的”。但真实威胁往往不是这么干净：
