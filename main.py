@@ -41,6 +41,10 @@ TRUSTED_PROXY_IPS = [
     if item.strip()
 ]
 
+STATIC_DIR_PATH = Path(STATIC_DIR)
+if not STATIC_DIR_PATH.exists():
+    STATIC_DIR_PATH.mkdir(parents=True, exist_ok=True)
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 session_store = SessionStore(ttl_seconds=SESSION_TTL_SECONDS)
