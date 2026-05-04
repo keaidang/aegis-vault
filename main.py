@@ -45,6 +45,22 @@ STATIC_DIR_PATH = Path(STATIC_DIR)
 if not STATIC_DIR_PATH.exists():
     STATIC_DIR_PATH.mkdir(parents=True, exist_ok=True)
 
+# 权限预检
+DATA_DIR_PATH = Path(os.getenv("AEGIS_DATA_DIR", "./data"))
+try:
+    DATA_DIR_PATH.mkdir(parents=True, exist_ok=True)
+    test_file = DATA_DIR_PATH / ".permission_test"
+    test_file.touch()
+    test_file.unlink()
+except Exception:
+    print("\n" + "!" * 60)
+    print("错误: 无法写入数据目录 " + str(DATA_DIR_PATH.absolute()))
+    print("请在宿主机执行以下命令修复权限:")
+    print(f"chown -R 10001:10001 {DATA_DIR_PATH}")
+    print("!" * 60 + "\n")
+    import sys
+    sys.exit(1)
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 session_store = SessionStore(ttl_seconds=SESSION_TTL_SECONDS)
